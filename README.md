@@ -15,7 +15,7 @@ One of my colleagues originally came up with the idea for this start page. We ar
 - 📱 **Responsive Design** - Works seamlessly on desktop and mobile
 - 🔒 **Secure Proxy** - Server-side API calls protect your credentials
 - ⚡ **Performance Optimized** - Aggressive caching and gzip compression
-- � **Docker Ready** - Single command deployment
+- 🐳 **Docker Ready** - Single command deployment
 
 ## 🖼️ Screenshot
 
