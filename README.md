@@ -17,6 +17,10 @@ One of my colleagues originally came up with the idea for this start page. We ar
 - ⚡ **Performance Optimized** - Aggressive caching and gzip compression
 - � **Docker Ready** - Single command deployment
 
+## 🖼️ Screenshot
+
+![screenshot](https://github.com/user-attachments/assets/171cef32-3e98-4155-93dc-303e84c070da)
+
 ## 🐳 Docker Ready - Single command deployment
 
 ### Prerequisites
