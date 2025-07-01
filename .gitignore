@@ -1,0 +1,34 @@
+# Environment variables
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Docker
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Build artifacts
+app/index.html.bak
+
+# Cleanup - old files
+nginx-simple.conf
+nginx-debug.conf.template
+nginx-production.conf.template
+Dockerfile.simple
+Dockerfile.production
+entrypoint-production.sh
+proxy-server.js
+package*.json
+node_modules/

@@ -1,0 +1,23 @@
+services:
+  startpage-vue:
+    build:
+      context: .
+      args:
+        APP_HASH: ${APP_HASH}
+    container_name: startpage-vue
+    ports:
+      - "${PORT:-3000}:80"
+    environment:
+      - PORT=80
+      - LINKDING_BASE_URL=${LINKDING_BASE_URL}
+      - LINKDING_API_TOKEN=${LINKDING_API_TOKEN}
+      - CF_ACCESS_CLIENT_ID=${CF_ACCESS_CLIENT_ID}
+      - CF_ACCESS_CLIENT_SECRET=${CF_ACCESS_CLIENT_SECRET}
+    restart: unless-stopped
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 2
