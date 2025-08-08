@@ -143,7 +143,7 @@
         .bookmark-column {
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 16px;
             min-width: 0;
         }
         
@@ -234,7 +234,7 @@
                 <!-- Loading skeleton for bottom section -->
                 <div v-if="isLoadingBottom" v-for="n in 6" :key="'skeleton-bottom-' + n" class="bookmark-column">
                     <div class="skeleton w-20 h-5 mx-auto mb-3"></div>
-                    <div v-for="i in 3" :key="'skeleton-item-' + n + '-' + i" class="skeleton bookmark-item mb-1"></div>
+                    <div v-for="i in 3" :key="'skeleton-item-' + n + '-' + i" class="skeleton bookmark-item"></div>
                 </div>
                 <!-- Actual bookmarks -->
                 <div v-else v-for="(bookmarks, tag) in groupedStaticBookmarksBottom" :key="tag" class="bookmark-column">
