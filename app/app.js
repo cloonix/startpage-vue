@@ -74,12 +74,17 @@ const app = Vue.createApp({
         },
         // Groups and sorts static bookmarks for the bottom section by tags
         groupedStaticBookmarksBottom() {
+            if (!this.staticBookmarksBottom || !Array.isArray(this.staticBookmarksBottom)) {
+                return {};
+            }
             const grouped = this.staticBookmarksBottom.reduce((groups, bookmark) => {
-                bookmark.tags.forEach(tag => {
-                    if (tag === 'startpage-bottom') return;
-                    if (!groups[tag]) groups[tag] = [];
-                    groups[tag].push(bookmark);
-                });
+                if (bookmark.tags && Array.isArray(bookmark.tags)) {
+                    bookmark.tags.forEach(tag => {
+                        if (tag === 'startpage-bottom') return;
+                        if (!groups[tag]) groups[tag] = [];
+                        groups[tag].push(bookmark);
+                    });
+                }
                 return groups;
             }, {});
             
@@ -91,11 +96,17 @@ const app = Vue.createApp({
         },
         // Returns sorted static bookmarks for the top section
         sortedStaticBookmarksTop() {
+            if (!this.staticBookmarksTop || !Array.isArray(this.staticBookmarksTop)) {
+                return [];
+            }
             return [...this.staticBookmarksTop].sort(this.sortByName);
         },
         
         // Enhanced filtered bookmarks with highlighting
         enhancedFilteredBookmarks() {
+            if (!this.filteredBookmarks || !Array.isArray(this.filteredBookmarks)) {
+                return [];
+            }
             return this.filteredBookmarks.map(bookmark => ({
                 ...bookmark,
                 highlightedName: this.highlightText(bookmark.name, this.highlightedQuery),
