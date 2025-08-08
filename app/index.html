@@ -14,13 +14,11 @@
             --bg-secondary: #1a1a1a;
             --bg-tertiary: #252525;
             --bg-hover: #2a2a2a;
-            --bg-active: #333333;
             --text-primary: #e5e5e5;
             --text-secondary: #a0a0a0;
             --text-muted: #666666;
             --border-subtle: #333333;
             --accent: #3b82f6;
-            --accent-hover: #2563eb;
         }
         
         /* Base styles */
@@ -60,43 +58,23 @@
             100% { background-position: -200% 0; }
         }
         
-        /* Enhanced bookmark styles */
-        .bookmark-item {
+        /* Base bookmark styling */
+        .bookmark-item, .search-result-item {
             background: var(--bg-secondary);
             border: 1px solid var(--border-subtle);
             border-radius: 6px;
-            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.15s ease;
             height: 36px;
-            position: relative;
-            overflow: hidden;
         }
         
-        .bookmark-item::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.1), transparent);
-            transition: left 0.5s;
-        }
-        
-        .bookmark-item:hover {
+        .bookmark-item:hover, .search-result-item:hover, .search-result-item.selected {
             background: var(--bg-hover);
             border-color: var(--accent);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(59, 130, 246, 0.1);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
         }
         
-        .bookmark-item:hover::before {
-            left: 100%;
-        }
-        
-        .bookmark-item:active {
-            transform: translateY(0);
-            background: var(--bg-active);
-        }
+        .search-result-item { height: auto; }
         
         /* Icon enhancements */
         .bookmark-icon {
@@ -137,154 +115,38 @@
             color: var(--text-muted);
         }
         
-        /* Grid layout for top section - 6 bookmarks per row, same width as bottom */
-        .bookmark-grid-top {
+        /* Unified responsive grid system - same for both areas */
+        .bookmark-grid {
             display: grid;
             grid-template-columns: repeat(6, minmax(120px, 1fr));
             gap: 16px;
             max-width: 100%;
         }
         
-        /* Top section bookmark styling - single bookmark per cell */
-        .top-bookmark-item {
-            display: flex;
-            flex-direction: column;
-            gap: 0;
-            min-width: 0;
+        /* Responsive breakpoints - identical for both areas */
+        @media (max-width: 1199px) { 
+            .bookmark-grid { grid-template-columns: repeat(5, minmax(90px, 1fr)); }
+        }
+        @media (max-width: 767px) { 
+            .bookmark-grid { grid-template-columns: repeat(4, minmax(65px, 1fr)); gap: 12px; }
+            .bookmark-item { height: 40px; }
+            .bookmark-icon { width: 20px !important; height: 20px !important; }
+        }
+        @media (max-width: 480px) { 
+            .bookmark-grid { grid-template-columns: repeat(6, minmax(35px, 1fr)); gap: 8px; }
+            .bookmark-item { height: 36px; justify-content: center; }
+            .bookmark-text { display: none !important; }
+            .bookmark-icon { width: 24px !important; height: 24px !important; }
         }
         
-        /* Column-based layout for bottom section - categories as columns */
-        .bookmark-grid-bottom {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 16px;
-            max-width: 100%;
-        }
-        
-        /* Ensure max 6 columns per row */
-        @supports (display: grid) {
-            .bookmark-grid-bottom {
-                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            }
-        }
-        
-        /* Force wrap after 6 items using flexbox fallback */
-        @media (min-width: 1200px) {
-            .bookmark-grid-top {
-                grid-template-columns: repeat(6, minmax(120px, 1fr));
-            }
-            
-            .bookmark-grid-bottom {
-                grid-template-columns: repeat(6, minmax(120px, 1fr));
-            }
-        }
-        
-        /* Large desktop - ensure both areas have same column count */
-        @media (min-width: 1024px) and (max-width: 1199px) {
-            .bookmark-grid-top {
-                grid-template-columns: repeat(5, minmax(120px, 1fr));
-            }
-            
-            .bookmark-grid-bottom {
-                grid-template-columns: repeat(5, minmax(120px, 1fr));
-            }
-        }
-        
-        /* Category column styling - match top area spacing */
-        .category-column {
+        /* Layout helpers */
+        .bookmark-column {
             display: flex;
             flex-direction: column;
             gap: 4px;
             min-width: 0;
         }
         
-        /* Tablet adjustments - 4-5 columns */
-        @media (min-width: 768px) and (max-width: 1023px) {
-            .bookmark-grid-top {
-                grid-template-columns: repeat(5, minmax(90px, 1fr));
-            }
-            
-            .bookmark-grid-bottom {
-                grid-template-columns: repeat(5, minmax(90px, 1fr));
-            }
-        }
-        
-        @media (min-width: 641px) and (max-width: 767px) {
-            .bookmark-grid-top {
-                grid-template-columns: repeat(4, minmax(75px, 1fr));
-            }
-            
-            .bookmark-grid-bottom {
-                grid-template-columns: repeat(4, minmax(75px, 1fr));
-            }
-        }
-        
-        /* Mobile with text - 4 columns */
-        @media (max-width: 640px) {
-            .bookmark-grid-top {
-                grid-template-columns: repeat(4, minmax(65px, 1fr));
-                gap: 12px;
-            }
-            
-            .bookmark-grid-bottom {
-                grid-template-columns: repeat(4, minmax(65px, 1fr));
-                gap: 12px;
-            }
-            
-            .bookmark-item {
-                height: 40px;
-            }
-            
-            .bookmark-icon {
-                width: 20px !important;
-                height: 20px !important;
-            }
-            
-            .bookmark-text {
-                font-size: 12px;
-            }
-        }
-        
-        /* Small mobile - icons only, 6 columns */
-        @media (max-width: 480px) {
-            .bookmark-grid-top {
-                grid-template-columns: repeat(6, minmax(35px, 1fr));
-                gap: 8px;
-            }
-            
-            .bookmark-grid-bottom {
-                grid-template-columns: repeat(6, minmax(35px, 1fr));
-                gap: 8px;
-            }
-            
-            .bookmark-item {
-                height: 36px;
-                justify-content: center;
-            }
-            
-            .bookmark-text {
-                display: none !important;
-            }
-            
-            .bookmark-icon {
-                width: 24px !important;
-                height: 24px !important;
-            }
-        }
-        
-        /* Search results styling */
-        .search-result-item {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-subtle);
-            border-radius: 6px;
-            transition: all 0.15s ease;
-        }
-        
-        .search-result-item:hover,
-        .search-result-item.selected {
-            background: var(--bg-hover);
-            border-color: var(--accent);
-        }
         
         /* Error and loading states */
         .error-message {
@@ -352,44 +214,36 @@
         <!-- Top Section Bookmarks -->
         <section v-if="!searchQuery" class="mb-6">
             <h2 class="section-title mb-3 text-center">self-hosted</h2>
-            <div id="startpage-bookmarks-top" class="bookmark-grid-top">
+            <div class="bookmark-grid">
                 <!-- Loading skeleton for top section -->
-                <div v-if="isLoadingTop" v-for="n in 6" :key="'skeleton-top-' + n" class="top-bookmark-item">
-                    <div class="skeleton rounded bookmark-item"></div>
+                <div v-if="isLoadingTop" v-for="n in 6" :key="'skeleton-top-' + n">
+                    <div class="skeleton bookmark-item"></div>
                 </div>
                 <!-- Actual bookmarks -->
-                <div v-else v-for="bookmark in sortedStaticBookmarksTop" :key="bookmark.id" class="top-bookmark-item">
-                    <a :href="bookmark.link" class="bookmark-item flex items-center justify-center sm:justify-start px-2">
-                        <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon w-5 h-5 object-cover" loading="lazy">
-                        <span class="bookmark-text truncate px-2 hidden sm:block">{{ bookmark.name }}</span>
-                    </a>
-                </div>
+                <a v-else v-for="bookmark in sortedStaticBookmarksTop" :key="bookmark.id" 
+                   :href="bookmark.link" class="bookmark-item flex items-center justify-center sm:justify-start px-2">
+                    <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon w-5 h-5 object-cover" loading="lazy">
+                    <span class="bookmark-text truncate px-2 hidden sm:block">{{ bookmark.name }}</span>
+                </a>
             </div>
         </section>
 
         <!-- Bottom Section Bookmarks -->
         <section v-if="!searchQuery" class="mb-4">
-            <div id="startpage-bookmarks-bottom" class="bookmark-grid-bottom">
+            <div class="bookmark-grid">
                 <!-- Loading skeleton for bottom section -->
-                <div v-if="isLoadingBottom" v-for="n in 6" :key="'skeleton-bottom-' + n" class="category-column">
-                    <div class="skeleton rounded w-20 h-5 mx-auto mb-3"></div>
-                    <div style="display: flex; flex-direction: column; gap: 16px;">
-                        <div v-for="i in 3" :key="'skeleton-item-' + n + '-' + i">
-                            <div class="skeleton rounded bookmark-item"></div>
-                        </div>
-                    </div>
+                <div v-if="isLoadingBottom" v-for="n in 6" :key="'skeleton-bottom-' + n" class="bookmark-column">
+                    <div class="skeleton w-20 h-5 mx-auto mb-3"></div>
+                    <div v-for="i in 3" :key="'skeleton-item-' + n + '-' + i" class="skeleton bookmark-item mb-1"></div>
                 </div>
                 <!-- Actual bookmarks -->
-                <div v-else v-for="(bookmarks, tag) in groupedStaticBookmarksBottom" :key="tag" class="category-column">
+                <div v-else v-for="(bookmarks, tag) in groupedStaticBookmarksBottom" :key="tag" class="bookmark-column">
                     <h3 class="section-title mb-3 text-center">{{ tag }}</h3>
-                    <div style="display: flex; flex-direction: column; gap: 16px;">
-                        <div v-for="bookmark in bookmarks" :key="bookmark.id">
-                            <a :href="bookmark.link" class="bookmark-item flex items-center justify-center sm:justify-start px-2">
-                                <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon w-5 h-5 object-cover" loading="lazy">
-                                <span class="bookmark-text truncate px-2 hidden sm:block">{{ bookmark.name }}</span>
-                            </a>
-                        </div>
-                    </div>
+                    <a v-for="bookmark in bookmarks" :key="bookmark.id" :href="bookmark.link" 
+                       class="bookmark-item flex items-center justify-center sm:justify-start px-2">
+                        <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon w-5 h-5 object-cover" loading="lazy">
+                        <span class="bookmark-text truncate px-2 hidden sm:block">{{ bookmark.name }}</span>
+                    </a>
                 </div>
             </div>
         </section>

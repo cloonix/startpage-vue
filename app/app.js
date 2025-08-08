@@ -17,81 +17,39 @@ const app = Vue.createApp({
         };
     },
     computed: {
-        // Enhanced search with fuzzy matching and highlighting
+        // Simplified search with basic relevance scoring
         filteredBookmarks() {
-            if (!this.searchQuery.trim()) {
-                return this.bookmarks;
-            }
+            if (!this.searchQuery.trim()) return this.bookmarks;
             
-            this.highlightedQuery = this.searchQuery;
             const query = this.searchQuery.toLowerCase();
-            const queryWords = query.split(' ');
+            this.highlightedQuery = this.searchQuery;
             
-            // Enhanced filter with fuzzy search
-            const scoredBookmarks = this.bookmarks.filter(bookmark => {
-                const titleMatch = this.fuzzySearch(bookmark.name, query) || 
-                                 queryWords.some(word => bookmark.name.toLowerCase().includes(word));
-                const tagMatch = bookmark.tags && bookmark.tags.some(tag => 
-                    this.fuzzySearch(tag, query) || queryWords.some(word => tag.toLowerCase().includes(word))
-                );
-                const descMatch = bookmark.description && this.fuzzySearch(bookmark.description, query);
-                
-                return titleMatch || tagMatch || descMatch;
-            }).map(bookmark => {
-                // Enhanced scoring
-                let score = 0;
+            return this.bookmarks.filter(bookmark => {
                 const title = bookmark.name.toLowerCase();
-                
-                queryWords.forEach(word => {
-                    if (title === word) score += 200; // Exact match
-                    else if (title.startsWith(word)) score += 150; // Starts with
-                    else if (title.includes(word)) score += 100; // Contains
-                    else if (this.fuzzySearch(bookmark.name, word)) score += 50; // Fuzzy match
-                    
-                    // Tag matches
-                    if (bookmark.tags) {
-                        bookmark.tags.forEach(tag => {
-                            const tagLower = tag.toLowerCase();
-                            if (tagLower === word) score += 80;
-                            else if (tagLower.includes(word)) score += 30;
-                            else if (this.fuzzySearch(tag, word)) score += 15;
-                        });
-                    }
-                    
-                    // Description matches
-                    if (bookmark.description && this.fuzzySearch(bookmark.description, word)) {
-                        score += 20;
-                    }
-                });
-                
-                return { ...bookmark, score };
-            });
-            
-            // Sort by score (descending) then alphabetically
-            return scoredBookmarks.sort((a, b) => {
-                if (a.score !== b.score) {
-                    return b.score - a.score;
-                }
-                return this.sortByName(a, b);
+                const tags = bookmark.tags?.join(' ').toLowerCase() || '';
+                const desc = bookmark.description?.toLowerCase() || '';
+                return title.includes(query) || tags.includes(query) || desc.includes(query);
+            }).sort((a, b) => {
+                const titleA = a.name.toLowerCase();
+                const titleB = b.name.toLowerCase();
+                // Prioritize exact matches, then starts-with, then alphabetical
+                const exactA = titleA === query ? 1000 : titleA.startsWith(query) ? 100 : 1;
+                const exactB = titleB === query ? 1000 : titleB.startsWith(query) ? 100 : 1;
+                return exactB - exactA || titleA.localeCompare(titleB);
             });
         },
         // Groups and sorts static bookmarks for the bottom section by tags
         groupedStaticBookmarksBottom() {
-            if (!this.staticBookmarksBottom || !Array.isArray(this.staticBookmarksBottom)) {
-                return {};
-            }
-            const grouped = this.staticBookmarksBottom.reduce((groups, bookmark) => {
-                if (bookmark.tags && Array.isArray(bookmark.tags)) {
-                    bookmark.tags.forEach(tag => {
-                        if (tag === 'startpage-bottom') return;
-                        if (!groups[tag]) groups[tag] = [];
-                        groups[tag].push(bookmark);
-                    });
-                }
+            const bookmarks = this.validateArray(this.staticBookmarksBottom);
+            const grouped = bookmarks.reduce((groups, bookmark) => {
+                bookmark.tags?.forEach(tag => {
+                    if (tag !== 'startpage-bottom') {
+                        (groups[tag] = groups[tag] || []).push(bookmark);
+                    }
+                });
                 return groups;
             }, {});
             
-            // Sort tags and bookmarks within each tag
             return Object.keys(grouped).sort().reduce((result, tag) => {
                 result[tag] = grouped[tag].sort(this.sortByName);
                 return result;
@@ -99,17 +57,11 @@ const app = Vue.createApp({
         },
         // Returns sorted static bookmarks for the top section
         sortedStaticBookmarksTop() {
-            if (!this.staticBookmarksTop || !Array.isArray(this.staticBookmarksTop)) {
-                return [];
-            }
-            return [...this.staticBookmarksTop].sort(this.sortByName);
+            return this.validateArray(this.staticBookmarksTop).sort(this.sortByName);
         },
         
         // Enhanced filtered bookmarks with highlighting
         enhancedFilteredBookmarks() {
-            if (!this.filteredBookmarks || !Array.isArray(this.filteredBookmarks)) {
-                return [];
-            }
             return this.filteredBookmarks.map(bookmark => ({
                 ...bookmark,
                 highlightedName: this.highlightText(bookmark.name, this.highlightedQuery),
@@ -118,6 +70,10 @@ const app = Vue.createApp({
         }
     },
     methods: {
+        // Array validation helper
+        validateArray(arr) {
+            return arr && Array.isArray(arr) ? arr : [];
+        },
         // Helper method to sort bookmarks alphabetically by name
         sortByName(a, b) {
             return a.name.localeCompare(b.name);
@@ -170,22 +126,6 @@ const app = Vue.createApp({
             return iconUrl;
         },
         
-        // Fuzzy search function
-        fuzzySearch(text, query) {
-            const textLower = text.toLowerCase();
-            const queryLower = query.toLowerCase();
-            
-            if (textLower.includes(queryLower)) return true;
-            
-            let textIndex = 0;
-            for (let char of queryLower) {
-                const index = textLower.indexOf(char, textIndex);
-                if (index === -1) return false;
-                textIndex = index + 1;
-            }
-            return true;
-        },
-        
         // Highlight matching text (for use in computed properties)
         highlightText(text, query) {
             if (!query.trim() || !text) return text;
@@ -205,104 +145,70 @@ const app = Vue.createApp({
             }
 },
         
-        // Fetches static bookmarks from Linkding API with progressive loading
+        // Fetches static bookmarks from Linkding API
         async fetchStaticBookmarks(searchTerm, isTopSection = false) {
             try {
                 const tagName = searchTerm.replace('#', '');
+                const data = await this.fetchAPI({ limit: '50', q: `#${tagName}` });
                 
-                const data = await this.fetchAPI({
-                    limit: '50',
-                    offset: '0',
-                    q: `#${tagName}`
-                });
-
-                if (data?.results?.length) {
-                    const bookmarks = data.results
-                        .filter(item => item.tag_names?.includes(tagName))
-                        .map(item => ({
-                            id: item.id,
-                            name: item.title || item.url,
-                            link: item.url,
-                            icon: this.extractIcon(item.notes, item.url),
-                            tags: item.tag_names || []
-                        }));
-                    
-                    // Preload first few icons
-                    this.preloadIcons(bookmarks.slice(0, 8));
-                    return bookmarks;
-                }
-                return [];
+                const bookmarks = data?.results
+                    ?.filter(item => item.tag_names?.includes(tagName))
+                    ?.map(item => ({
+                        id: item.id,
+                        name: item.title || item.url,
+                        link: item.url,
+                        icon: this.extractIcon(item.notes, item.url),
+                        tags: item.tag_names || []
+                    })) || [];
+                
+                this.preloadIcons(bookmarks);
+                return bookmarks;
             } catch (error) {
                 console.error('Failed to load static bookmarks:', error);
                 return [];
             } finally {
-                if (isTopSection) {
-                    this.isLoadingTop = false;
-                } else {
-                    this.isLoadingBottom = false;
-                }
+                if (isTopSection) this.isLoadingTop = false;
+                else this.isLoadingBottom = false;
             }
         },
         
         // Preload icons for better performance
-        async preloadIcons(bookmarks) {
-            const preloadPromises = bookmarks.map(bookmark => {
-                return new Promise(resolve => {
-                    const img = new Image();
-                    img.onload = img.onerror = resolve;
-                    img.src = bookmark.icon;
-                });
+        preloadIcons(bookmarks, limit = 8) {
+            bookmarks.slice(0, limit).forEach(bookmark => {
+                const img = new Image();
+                img.src = bookmark.icon;
             });
-            
-            // Don't wait for all icons, just start the preload
-            Promise.allSettled(preloadPromises);
         },
         
-        // Enhanced bookmark fetching with better error handling and reduced payload
+        // Enhanced bookmark fetching with better error handling
         async fetchBookmarks(query = '') {
             try {
                 this.isSearching = !!query;
                 this.errorMessage = '';
                 
-                const params = { 
-                    limit: query ? '50' : '100', 
-                    offset: '0'
-                };
+                const params = { limit: query ? '50' : '100' };
                 if (query) params.q = query;
                 
                 const data = await this.fetchAPI(params);
+                const bookmarks = data?.results?.map(item => ({
+                    id: item.id,
+                    name: item.title || item.url,
+                    link: item.url,
+                    icon: this.extractIcon(item.notes, item.url),
+                    tags: item.tag_names || [],
+                    description: item.description || ''
+                })) || [];
                 
-                if (data?.results?.length) {
-                    const bookmarks = data.results.map(item => ({
-                        id: item.id,
-                        name: item.title || item.url,
-                        link: item.url,
-                        icon: this.extractIcon(item.notes, item.url),
-                        tags: item.tag_names || [],
-                        description: item.description || ''
-                    }));
-                    
-                    this.bookmarks = bookmarks;
-                    
-                    // Preload search result icons
-                    if (query && bookmarks.length <= 20) {
-                        this.preloadIcons(bookmarks);
-                    }
-                } else {
-                    this.bookmarks = [];
-                    if (query) {
-                        this.errorMessage = `No bookmarks found for "${query}"`;
-                    }
-                }
+                this.bookmarks = bookmarks;
+                if (query && bookmarks.length <= 20) this.preloadIcons(bookmarks);
+                if (query && !bookmarks.length) this.errorMessage = `No bookmarks found for "${query}"`;
+                
             } catch (error) {
                 console.error('Fetch error:', error);
-                if (error.message.includes('Failed to fetch')) {
-                    this.errorMessage = 'Unable to connect to Linkding server. Please check your connection.';
-                } else if (error.message.includes('401') || error.message.includes('403')) {
-                    this.errorMessage = 'Authentication failed. Please check your API token.';
-                } else {
-                    this.errorMessage = `Failed to load bookmarks: ${error.message}`;
-                }
+                this.errorMessage = error.message.includes('Failed to fetch') 
+                    ? 'Unable to connect to Linkding server. Please check your connection.'
+                    : error.message.includes('40') ? 'Authentication failed. Please check your API token.'
+                    : `Failed to load bookmarks: ${error.message}`;
                 this.bookmarks = [];
             } finally {
                 this.isSearching = false;
