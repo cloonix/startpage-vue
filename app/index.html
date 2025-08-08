@@ -27,6 +27,18 @@
             100% { transform: rotate(360deg); }
         }
         
+        /* Skeleton loading animation */
+        .skeleton {
+            background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s infinite;
+        }
+        
+        @keyframes skeleton-loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        
         /* Responsive improvements */
         @media (max-width: 640px) {
             .bookmark-link {
@@ -88,10 +100,15 @@
         </div>
         
         <!-- Top Section Bookmarks -->
-        <section v-else-if="!searchQuery" class="mb-6">
+        <section v-if="!searchQuery" class="mb-6">
             <h2 class="text-lg font-bold text-gray-300 mb-2 text-center">self-hosted</h2>
             <div id="startpage-bookmarks-top" class="grid grid-cols-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 justify-center">
-                <div v-for="bookmark in sortedStaticBookmarksTop" :key="bookmark.id">
+                <!-- Loading skeleton for top section -->
+                <div v-if="isLoadingTop" v-for="n in 12" :key="'skeleton-top-' + n" 
+                     class="skeleton rounded w-full h-[50px] sm:h-[40px]">
+                </div>
+                <!-- Actual bookmarks -->
+                <div v-else v-for="bookmark in sortedStaticBookmarksTop" :key="bookmark.id">
                     <a :href="bookmark.link" class="block bg-gray-700 rounded flex items-center justify-center sm:justify-start w-full h-[50px] sm:h-[40px] px-2 hover:bg-gray-600 transition">
                         <img :src="bookmark.icon" :alt="bookmark.name" class="w-6 h-6 rounded ml-0 sm:ml-2 object-cover" loading="lazy">
                         <span class="truncate px-3 text-xs text-gray-200 hidden sm:block">{{ bookmark.name }}</span>
@@ -103,7 +120,17 @@
         <!-- Bottom Section Bookmarks -->
         <section v-if="!searchQuery" class="mb-6">
             <div id="startpage-bookmarks-bottom" class="grid grid-cols-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 justify-center">
-                <div v-for="(bookmarks, tag) in groupedStaticBookmarksBottom" :key="tag" class="flex flex-col">
+                <!-- Loading skeleton for bottom section -->
+                <div v-if="isLoadingBottom" v-for="n in 18" :key="'skeleton-bottom-' + n" class="flex flex-col">
+                    <div class="skeleton rounded w-20 h-6 mx-auto mb-2"></div>
+                    <div class="grid grid-cols-1 gap-2">
+                        <div v-for="i in 3" :key="'skeleton-item-' + n + '-' + i">
+                            <div class="skeleton rounded w-full h-[50px] sm:h-[40px]"></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Actual bookmarks -->
+                <div v-else v-for="(bookmarks, tag) in groupedStaticBookmarksBottom" :key="tag" class="flex flex-col">
                     <h3 class="text-lg font-bold text-gray-300 mb-2 text-center">{{ tag }}</h3>
                     <div class="grid grid-cols-1 gap-2">
                         <div v-for="bookmark in bookmarks" :key="bookmark.id">

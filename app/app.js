@@ -6,11 +6,14 @@ const app = Vue.createApp({
             staticBookmarksBottom: [],
             staticBookmarksTop: [],
             selectedIndex: -1,
-            isLoading: true,
+            isLoading: false,
+            isLoadingTop: true,
+            isLoadingBottom: true,
             isSearching: false,
             errorMessage: '',
             searchResults: [],
-            highlightedQuery: ''
+            highlightedQuery: '',
+            iconCache: new Map()
         };
     },
     computed: {
@@ -134,12 +137,20 @@ const app = Vue.createApp({
             return response.json();
         },
         
-        // Extract icon from notes field with favicon fallback
+        // Extract icon from notes field with favicon fallback and caching
         extractIcon(notes, url) {
+            const cacheKey = `${notes || ''}_${url || ''}`;
+            if (this.iconCache.has(cacheKey)) {
+                return this.iconCache.get(cacheKey);
+            }
+            
+            let iconUrl;
             if (notes) {
                 const iconMatch = notes.match(/icon::(.+?)(?:\s|$)/);
                 if (iconMatch?.[1]?.trim()) {
-                    return iconMatch[1].trim();
+                    iconUrl = iconMatch[1].trim();
+                    this.iconCache.set(cacheKey, iconUrl);
+                    return iconUrl;
                 }
             }
             
@@ -147,13 +158,16 @@ const app = Vue.createApp({
             if (url) {
                 try {
                     const domain = new URL(url).hostname;
-                    return `https://www.google.com/s2/favicons?domain=${domain}&sz=24`;
+                    iconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=24`;
                 } catch {
-                    return 'https://placehold.co/24x24';
+                    iconUrl = 'https://placehold.co/24x24';
                 }
+            } else {
+                iconUrl = 'https://placehold.co/24x24';
             }
             
-            return 'https://placehold.co/24x24';
+            this.iconCache.set(cacheKey, iconUrl);
+            return iconUrl;
         },
         
         // Fuzzy search function
@@ -191,20 +205,19 @@ const app = Vue.createApp({
             }
 },
         
-        // Fetches static bookmarks from Linkding API and handles errors
-        async fetchStaticBookmarks(searchTerm) {
+        // Fetches static bookmarks from Linkding API with progressive loading
+        async fetchStaticBookmarks(searchTerm, isTopSection = false) {
             try {
-                this.isLoading = true;
                 const tagName = searchTerm.replace('#', '');
                 
                 const data = await this.fetchAPI({
-                    limit: '100',
+                    limit: '50',
                     offset: '0',
                     q: `#${tagName}`
                 });
 
                 if (data?.results?.length) {
-                    return data.results
+                    const bookmarks = data.results
                         .filter(item => item.tag_names?.includes(tagName))
                         .map(item => ({
                             id: item.id,
@@ -213,30 +226,54 @@ const app = Vue.createApp({
                             icon: this.extractIcon(item.notes, item.url),
                             tags: item.tag_names || []
                         }));
+                    
+                    // Preload first few icons
+                    this.preloadIcons(bookmarks.slice(0, 8));
+                    return bookmarks;
                 }
                 return [];
             } catch (error) {
-                this.errorMessage = 'Failed to load bookmarks';
+                console.error('Failed to load static bookmarks:', error);
                 return [];
             } finally {
-                this.isLoading = false;
+                if (isTopSection) {
+                    this.isLoadingTop = false;
+                } else {
+                    this.isLoadingBottom = false;
+                }
             }
         },
         
-        // Enhanced bookmark fetching with better error handling
+        // Preload icons for better performance
+        async preloadIcons(bookmarks) {
+            const preloadPromises = bookmarks.map(bookmark => {
+                return new Promise(resolve => {
+                    const img = new Image();
+                    img.onload = img.onerror = resolve;
+                    img.src = bookmark.icon;
+                });
+            });
+            
+            // Don't wait for all icons, just start the preload
+            Promise.allSettled(preloadPromises);
+        },
+        
+        // Enhanced bookmark fetching with better error handling and reduced payload
         async fetchBookmarks(query = '') {
             try {
                 this.isSearching = !!query;
-                if (!query) this.isLoading = true;
                 this.errorMessage = '';
                 
-                const params = { limit: '100', offset: '0' };
+                const params = { 
+                    limit: query ? '50' : '100', 
+                    offset: '0'
+                };
                 if (query) params.q = query;
                 
                 const data = await this.fetchAPI(params);
                 
                 if (data?.results?.length) {
-                    this.bookmarks = data.results.map(item => ({
+                    const bookmarks = data.results.map(item => ({
                         id: item.id,
                         name: item.title || item.url,
                         link: item.url,
@@ -244,6 +281,13 @@ const app = Vue.createApp({
                         tags: item.tag_names || [],
                         description: item.description || ''
                     }));
+                    
+                    this.bookmarks = bookmarks;
+                    
+                    // Preload search result icons
+                    if (query && bookmarks.length <= 20) {
+                        this.preloadIcons(bookmarks);
+                    }
                 } else {
                     this.bookmarks = [];
                     if (query) {
@@ -261,7 +305,6 @@ const app = Vue.createApp({
                 }
                 this.bookmarks = [];
             } finally {
-                this.isLoading = false;
                 this.isSearching = false;
             }
         },
@@ -299,26 +342,28 @@ const app = Vue.createApp({
         }
     },
     async mounted() {
-        try {
-            // Load static bookmarks from Linkding API
-            const [topBookmarks, bottomBookmarks] = await Promise.all([
-                this.fetchStaticBookmarks('#startpage-top'),
-                this.fetchStaticBookmarks('#startpage-bottom')
-            ]);
-            
-            this.staticBookmarksTop = topBookmarks;
-            this.staticBookmarksBottom = bottomBookmarks;
-            
-            // Fetch initial bookmarks
-            await this.fetchBookmarks();
-        } catch (error) {
-            console.error('Initialization error:', error);
-            this.errorMessage = 'Failed to initialize application. Please refresh the page.';
-        }
-        
-        // Set up event listeners
+        // Set up event listeners and focus immediately
         window.addEventListener('keydown', this.handleKeydown);
         this.$nextTick(() => this.$refs.searchInput?.focus());
+        
+        // Load top section first (most important)
+        this.fetchStaticBookmarks('#startpage-top', true)
+            .then(bookmarks => {
+                this.staticBookmarksTop = bookmarks;
+            });
+        
+        // Load bottom section after a short delay
+        setTimeout(() => {
+            this.fetchStaticBookmarks('#startpage-bottom', false)
+                .then(bookmarks => {
+                    this.staticBookmarksBottom = bookmarks;
+                });
+        }, 100);
+        
+        // Load search bookmarks in background after sections are loaded
+        setTimeout(() => {
+            this.fetchBookmarks();
+        }, 200);
     },
     beforeUnmount() {
         window.removeEventListener('keydown', this.handleKeydown);
