@@ -7,41 +7,57 @@ const app = Vue.createApp({
             staticBookmarksTop: [],
             selectedIndex: -1,
             isLoading: true,
-            errorMessage: ''
+            isSearching: false,
+            errorMessage: '',
+            searchResults: [],
+            highlightedQuery: ''
         };
     },
     computed: {
-        // Filters bookmarks based on the search query and prioritizes title matches over tag matches
+        // Enhanced search with fuzzy matching and highlighting
         filteredBookmarks() {
             if (!this.searchQuery.trim()) {
                 return this.bookmarks;
             }
             
-            const query = this.searchQuery.toLowerCase().split(' ');
+            this.highlightedQuery = this.searchQuery;
+            const query = this.searchQuery.toLowerCase();
+            const queryWords = query.split(' ');
             
-            // Filter and score bookmarks
+            // Enhanced filter with fuzzy search
             const scoredBookmarks = this.bookmarks.filter(bookmark => {
-                const titleMatch = query.every(word => 
-                    bookmark.name.toLowerCase().includes(word)
+                const titleMatch = this.fuzzySearch(bookmark.name, query) || 
+                                 queryWords.some(word => bookmark.name.toLowerCase().includes(word));
+                const tagMatch = bookmark.tags && bookmark.tags.some(tag => 
+                    this.fuzzySearch(tag, query) || queryWords.some(word => tag.toLowerCase().includes(word))
                 );
-                const tagMatch = query.every(word => 
-                    bookmark.tags && bookmark.tags.some(tag => tag.toLowerCase().includes(word))
-                );
+                const descMatch = bookmark.description && this.fuzzySearch(bookmark.description, query);
                 
-                return titleMatch || tagMatch;
+                return titleMatch || tagMatch || descMatch;
             }).map(bookmark => {
-                // Calculate relevance score
+                // Enhanced scoring
                 let score = 0;
                 const title = bookmark.name.toLowerCase();
                 
-                query.forEach(word => {
-                    // Higher score for title matches
-                    if (title.includes(word)) {
-                        score += title.startsWith(word) ? 100 : 50; // Even higher for starts with
+                queryWords.forEach(word => {
+                    if (title === word) score += 200; // Exact match
+                    else if (title.startsWith(word)) score += 150; // Starts with
+                    else if (title.includes(word)) score += 100; // Contains
+                    else if (this.fuzzySearch(bookmark.name, word)) score += 50; // Fuzzy match
+                    
+                    // Tag matches
+                    if (bookmark.tags) {
+                        bookmark.tags.forEach(tag => {
+                            const tagLower = tag.toLowerCase();
+                            if (tagLower === word) score += 80;
+                            else if (tagLower.includes(word)) score += 30;
+                            else if (this.fuzzySearch(tag, word)) score += 15;
+                        });
                     }
-                    // Lower score for tag matches
-                    else if (bookmark.tags && bookmark.tags.some(tag => tag.toLowerCase().includes(word))) {
-                        score += 10;
+                    
+                    // Description matches
+                    if (bookmark.description && this.fuzzySearch(bookmark.description, word)) {
+                        score += 20;
                     }
                 });
                 
@@ -76,6 +92,15 @@ const app = Vue.createApp({
         // Returns sorted static bookmarks for the top section
         sortedStaticBookmarksTop() {
             return [...this.staticBookmarksTop].sort(this.sortByName);
+        },
+        
+        // Enhanced filtered bookmarks with highlighting
+        enhancedFilteredBookmarks() {
+            return this.filteredBookmarks.map(bookmark => ({
+                ...bookmark,
+                highlightedName: this.highlightText(bookmark.name, this.highlightedQuery),
+                highlightedDescription: this.highlightText(bookmark.description, this.highlightedQuery)
+            }));
         }
     },
     methods: {
@@ -98,13 +123,62 @@ const app = Vue.createApp({
             return response.json();
         },
         
-        // Extract icon from notes field
-        extractIcon(notes) {
-            if (!notes) return 'https://placehold.co/24x24';
+        // Extract icon from notes field with favicon fallback
+        extractIcon(notes, url) {
+            if (notes) {
+                const iconMatch = notes.match(/icon::(.+?)(?:\s|$)/);
+                if (iconMatch?.[1]?.trim()) {
+                    return iconMatch[1].trim();
+                }
+            }
             
-            const iconMatch = notes.match(/icon::(.+?)(?:\s|$)/);
-            return iconMatch?.[1]?.trim() || 'https://placehold.co/24x24';
+            // Favicon fallback
+            if (url) {
+                try {
+                    const domain = new URL(url).hostname;
+                    return `https://www.google.com/s2/favicons?domain=${domain}&sz=24`;
+                } catch {
+                    return 'https://placehold.co/24x24';
+                }
+            }
+            
+            return 'https://placehold.co/24x24';
         },
+        
+        // Fuzzy search function
+        fuzzySearch(text, query) {
+            const textLower = text.toLowerCase();
+            const queryLower = query.toLowerCase();
+            
+            if (textLower.includes(queryLower)) return true;
+            
+            let textIndex = 0;
+            for (let char of queryLower) {
+                const index = textLower.indexOf(char, textIndex);
+                if (index === -1) return false;
+                textIndex = index + 1;
+            }
+            return true;
+        },
+        
+        // Highlight matching text (for use in computed properties)
+        highlightText(text, query) {
+            if (!query.trim() || !text) return text;
+            
+            try {
+                const words = query.split(' ').filter(word => word.length > 0);
+                let result = text;
+                
+                words.forEach(word => {
+                    const regex = new RegExp(`(${word.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')})`, 'gi');
+                    result = result.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">$1</mark>');
+                });
+                
+                return result;
+            } catch {
+                return text;
+            }
+},
         
         // Fetches static bookmarks from Linkding API and handles errors
         async fetchStaticBookmarks(searchTerm) {
@@ -125,7 +199,7 @@ const app = Vue.createApp({
                             id: item.id,
                             name: item.title || item.url,
                             link: item.url,
-                            icon: this.extractIcon(item.notes),
+                            icon: this.extractIcon(item.notes, item.url),
                             tags: item.tag_names || []
                         }));
                 }
@@ -138,10 +212,11 @@ const app = Vue.createApp({
             }
         },
         
-        // Fetches bookmarks from Linkding API
+        // Enhanced bookmark fetching with better error handling
         async fetchBookmarks(query = '') {
             try {
-                this.isLoading = true;
+                this.isSearching = !!query;
+                if (!query) this.isLoading = true;
                 this.errorMessage = '';
                 
                 const params = { limit: '100', offset: '0' };
@@ -154,30 +229,43 @@ const app = Vue.createApp({
                         id: item.id,
                         name: item.title || item.url,
                         link: item.url,
-                        icon: null,
+                        icon: this.extractIcon(item.notes, item.url),
                         tags: item.tag_names || [],
                         description: item.description || ''
                     }));
                 } else {
                     this.bookmarks = [];
+                    if (query) {
+                        this.errorMessage = `No bookmarks found for "${query}"`;
+                    }
                 }
             } catch (error) {
-                this.errorMessage = 'Failed to load bookmarks';
+                console.error('Fetch error:', error);
+                if (error.message.includes('Failed to fetch')) {
+                    this.errorMessage = 'Unable to connect to Linkding server. Please check your connection.';
+                } else if (error.message.includes('401') || error.message.includes('403')) {
+                    this.errorMessage = 'Authentication failed. Please check your API token.';
+                } else {
+                    this.errorMessage = `Failed to load bookmarks: ${error.message}`;
+                }
                 this.bookmarks = [];
             } finally {
                 this.isLoading = false;
+                this.isSearching = false;
             }
         },
         // Handles keyboard navigation and actions for the search results
         handleKeydown(event) {
-            if (event.key === 'ArrowDown') {
-                this.selectedIndex = (this.selectedIndex + 1) % this.filteredBookmarks.length;
-            } else if (event.key === 'ArrowUp') {
-                this.selectedIndex = (this.selectedIndex - 1 + this.filteredBookmarks.length) % this.filteredBookmarks.length;
+            const bookmarkList = this.searchQuery ? this.enhancedFilteredBookmarks : [];
+            
+            if (event.key === 'ArrowDown' && bookmarkList.length) {
+                this.selectedIndex = (this.selectedIndex + 1) % bookmarkList.length;
+            } else if (event.key === 'ArrowUp' && bookmarkList.length) {
+                this.selectedIndex = (this.selectedIndex - 1 + bookmarkList.length) % bookmarkList.length;
             } else if (event.key === 'Enter') {
-                if (this.filteredBookmarks.length === 1 || this.selectedIndex >= 0) {
-                    const link = this.filteredBookmarks[this.selectedIndex]?.link || this.filteredBookmarks[0].link;
-                    window.location.href = link;
+                if (bookmarkList.length === 1 || this.selectedIndex >= 0) {
+                    const link = bookmarkList[this.selectedIndex]?.link || bookmarkList[0]?.link;
+                    if (link) window.location.href = link;
                 }
             } else if (event.key === 'Escape') {
                 this.searchQuery = '';
@@ -200,21 +288,26 @@ const app = Vue.createApp({
         }
     },
     async mounted() {
-        // Load static bookmarks from Linkding API
-        const [topBookmarks, bottomBookmarks] = await Promise.all([
-            this.fetchStaticBookmarks('#startpage-top'),
-            this.fetchStaticBookmarks('#startpage-bottom')
-        ]);
-        
-        this.staticBookmarksTop = topBookmarks;
-        this.staticBookmarksBottom = bottomBookmarks;
-        
-        // Fetch initial bookmarks
-        this.fetchBookmarks();
+        try {
+            // Load static bookmarks from Linkding API
+            const [topBookmarks, bottomBookmarks] = await Promise.all([
+                this.fetchStaticBookmarks('#startpage-top'),
+                this.fetchStaticBookmarks('#startpage-bottom')
+            ]);
+            
+            this.staticBookmarksTop = topBookmarks;
+            this.staticBookmarksBottom = bottomBookmarks;
+            
+            // Fetch initial bookmarks
+            await this.fetchBookmarks();
+        } catch (error) {
+            console.error('Initialization error:', error);
+            this.errorMessage = 'Failed to initialize application. Please refresh the page.';
+        }
         
         // Set up event listeners
         window.addEventListener('keydown', this.handleKeydown);
-        this.$nextTick(() => this.$refs.searchInput.focus());
+        this.$nextTick(() => this.$refs.searchInput?.focus());
     },
     beforeUnmount() {
         window.removeEventListener('keydown', this.handleKeydown);

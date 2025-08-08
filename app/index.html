@@ -11,6 +11,34 @@
         /* Minimize layout shift */
         .bookmark-grid { min-height: 120px; }
         .search-input { transition: all 0.2s ease; }
+        
+        /* Loading spinner */
+        .spinner {
+            border: 2px solid transparent;
+            border-top: 2px solid currentColor;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Responsive improvements */
+        @media (max-width: 640px) {
+            .bookmark-link {
+                min-height: 48px;
+                font-size: 12px;
+            }
+            
+            .bookmark-icon {
+                width: 20px;
+                height: 20px;
+            }
+        }
     </style>
 </head>
 
@@ -36,24 +64,43 @@
                     id="search" 
                     placeholder="Search bookmarks..." 
                     class="w-full px-4 py-2 pl-10 border border-gray-600 rounded-lg bg-gray-700/50 backdrop-blur-sm text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200">
-                <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg v-if="!isSearching" class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                 </svg>
+                <div v-else class="absolute left-3 top-1/2 transform -translate-y-1/2">
+                    <div class="spinner text-gray-400"></div>
+                </div>
+                <button v-if="searchQuery" @click="searchQuery = ''; selectedIndex = -1" 
+                        class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-200 transition-colors">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
             </div>
         </section>
 
-        <section v-if="!searchQuery" class="mb-6">
+        <!-- Loading State -->
+        <div v-if="isLoading" class="flex items-center justify-center py-12">
+            <div class="text-center">
+                <div class="spinner mx-auto mb-4 w-8 h-8 text-gray-400"></div>
+                <p class="text-gray-400 text-sm">Loading bookmarks...</p>
+            </div>
+        </div>
+        
+        <!-- Top Section Bookmarks -->
+        <section v-else-if="!searchQuery" class="mb-6">
             <h2 class="text-lg font-bold text-gray-300 mb-2 text-center">self-hosted</h2>
             <div id="startpage-bookmarks-top" class="grid grid-cols-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 justify-center">
                 <div v-for="bookmark in sortedStaticBookmarksTop" :key="bookmark.id">
                     <a :href="bookmark.link" class="block bg-gray-700 rounded flex items-center justify-center sm:justify-start w-full h-[50px] sm:h-[40px] px-2 hover:bg-gray-600 transition">
-                        <img :src="bookmark.icon || 'https://placehold.co/24x24'" :alt="bookmark.name" class="w-6 h-6 rounded ml-0 sm:ml-2 object-cover" loading="lazy">
+                        <img :src="bookmark.icon" :alt="bookmark.name" class="w-6 h-6 rounded ml-0 sm:ml-2 object-cover" loading="lazy">
                         <span class="truncate px-3 text-xs text-gray-200 hidden sm:block">{{ bookmark.name }}</span>
                     </a>
                 </div>
             </div>
         </section>
 
+        <!-- Bottom Section Bookmarks -->
         <section v-if="!searchQuery" class="mb-6">
             <div id="startpage-bookmarks-bottom" class="grid grid-cols-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 justify-center">
                 <div v-for="(bookmarks, tag) in groupedStaticBookmarksBottom" :key="tag" class="flex flex-col">
@@ -61,7 +108,7 @@
                     <div class="grid grid-cols-1 gap-2">
                         <div v-for="bookmark in bookmarks" :key="bookmark.id">
                             <a :href="bookmark.link" class="block bg-gray-700 rounded flex items-center justify-center sm:justify-start w-full h-[50px] sm:h-[40px] px-2 hover:bg-gray-600 transition">
-                                <img :src="bookmark.icon || 'https://placehold.co/24x24'" :alt="bookmark.name" class="w-6 h-6 rounded ml-0 sm:ml-2 object-cover" loading="lazy">
+                                <img :src="bookmark.icon" :alt="bookmark.name" class="w-6 h-6 rounded ml-0 sm:ml-2 object-cover" loading="lazy">
                                 <span class="truncate px-3 text-xs text-gray-200 hidden sm:block">{{ bookmark.name }}</span>
                             </a>
                         </div>
@@ -71,25 +118,38 @@
         </section>
 
         <!-- Search Results Section -->
-        <section v-if="searchQuery" class="mb-6">
-            <table class="w-full table-auto border-collapse">
-                <tbody>
-                    <tr v-for="(bookmark, index) in filteredBookmarks" 
-                        :key="bookmark.id" 
-                        :class="{'bg-gray-700': index === selectedIndex, 'hover:bg-gray-700': index !== selectedIndex, 'transition-colors duration-200': true}"
-                        @mouseover="selectedIndex = index">
-                        <td class="border-b border-gray-700 p-3">
-                            <a :href="bookmark.link" class="text-blue-400 hover:underline block">{{ bookmark.name }}</a>
-                            <div class="mt-1">
-                                <span v-for="(tag, tagIndex) in bookmark.tags" 
-                                      :key="tag + '-' + tagIndex" 
-                                      class="bg-gray-600 text-gray-300 px-1 py-[2px] rounded text-xs mr-1">#{{ tag }}</span>
+        <section v-else-if="searchQuery" class="mb-6">
+            <div v-if="enhancedFilteredBookmarks.length" class="space-y-1">
+                <div class="text-sm text-gray-400 mb-4 px-2">
+                    {{ enhancedFilteredBookmarks.length }} result{{ enhancedFilteredBookmarks.length !== 1 ? 's' : '' }} for "{{ searchQuery }}"
+                </div>
+                <div v-for="(bookmark, index) in enhancedFilteredBookmarks" 
+                     :key="bookmark.id" 
+                     :class="['border-b border-gray-700 p-3 transition-colors duration-200', 
+                              index === selectedIndex ? 'bg-gray-700' : 'hover:bg-gray-700']"
+                     @mouseover="selectedIndex = index">
+                    <a :href="bookmark.link" class="block">
+                        <div class="flex items-start gap-3">
+                            <img :src="bookmark.icon" 
+                                 :alt="bookmark.name" 
+                                 class="w-6 h-6 rounded object-cover flex-shrink-0 mt-0.5" 
+                                 loading="lazy">
+                            <div class="flex-1 min-w-0">
+                                <h4 class="text-blue-400 hover:underline font-medium" v-html="bookmark.highlightedName"></h4>
+                                <div v-if="bookmark.description" class="text-sm text-gray-400 mt-1" v-html="bookmark.highlightedDescription"></div>
+                                <div v-if="bookmark.tags && bookmark.tags.length" class="mt-1">
+                                    <span v-for="tag in bookmark.tags" 
+                                          :key="tag" 
+                                          class="bg-gray-600 text-gray-300 px-1 py-[2px] rounded text-xs mr-1">
+                                        #{{ tag }}
+                                    </span>
+                                </div>
                             </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-            <div v-if="filteredBookmarks.length === 0" class="text-center p-4 text-gray-400">
+                        </div>
+                    </a>
+                </div>
+            </div>
+            <div v-else-if="!isSearching" class="text-center p-4 text-gray-400">
                 No bookmarks found matching your search.
             </div>
         </section>
