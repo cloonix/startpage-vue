@@ -17,8 +17,10 @@ RUN chmod +x /entrypoint.sh
 ARG APP_HASH
 ENV APP_HASH=${APP_HASH}
 
-# Replace APP_HASH in HTML files
+# Replace APP_HASH in HTML and CSS files
 RUN find /usr/share/nginx/html -name "*.html" -type f -exec \
+    sed -i "s/APP_HASH/${APP_HASH}/g" {} \; && \
+    find /usr/share/nginx/html -name "*.css" -type f -exec \
     sed -i "s/APP_HASH/${APP_HASH}/g" {} \;
 
 EXPOSE 80
