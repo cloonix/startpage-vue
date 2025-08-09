@@ -128,24 +128,27 @@ body {
     color: var(--text-muted);
 }
 
-/* Unified responsive grid system - same for both areas */
+/* Unified responsive grid system - 7 columns for both areas */
 .bookmark-grid {
     display: grid;
-    grid-template-columns: repeat(6, minmax(120px, 1fr));
+    grid-template-columns: repeat(7, minmax(105px, 1fr));
     gap: 16px;
     max-width: 100%;
 }
 
 /* Responsive breakpoints */
+@media (max-width: 1399px) { 
+    .bookmark-grid { grid-template-columns: repeat(6, minmax(90px, 1fr)); }
+}
 @media (max-width: 1199px) { 
-    .bookmark-grid { grid-template-columns: repeat(5, minmax(90px, 1fr)); }
+    .bookmark-grid { grid-template-columns: repeat(5, minmax(75px, 1fr)); }
 }
 @media (max-width: 767px) { 
     .bookmark-grid { grid-template-columns: repeat(4, minmax(65px, 1fr)); gap: 12px; }
     .bookmark-item { height: 40px; }
 }
 @media (max-width: 480px) { 
-    .bookmark-grid { grid-template-columns: repeat(6, minmax(35px, 1fr)); gap: 8px; }
+    .bookmark-grid { grid-template-columns: repeat(7, minmax(32px, 1fr)); gap: 8px; }
     .bookmark-item { height: 36px; }
     .bookmark-link { justify-content: center; }
     .bookmark-icon { width: 24px; height: 24px; }

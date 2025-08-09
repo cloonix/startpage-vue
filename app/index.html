@@ -11,7 +11,7 @@
 </head>
 
 <body class="flex flex-col items-center p-4">
-    <div id="app" class="w-full max-w-7xl">
+    <div id="app" class="w-full max-w-6xl">
         <!-- Header Section -->
         <header class="mb-4 text-center">
             <p class="header-text">Use ↑↓← → to navigate • Enter to open • Esc to reset</p>
@@ -63,7 +63,7 @@
                 <h2 class="section-title mb-3 text-center">self-hosted</h2>
                 <div class="bookmark-grid">
                     <template v-if="isLoadingTop">
-                        <div v-for="n in 6" :key="'skeleton-top-' + n" class="skeleton bookmark-item"></div>
+                        <div v-for="n in 7" :key="'skeleton-top-' + n" class="skeleton bookmark-item"></div>
                     </template>
                     <template v-else>
                         <a v-for="bookmark in sortedStaticBookmarksTop" :key="bookmark.id" :href="bookmark.link" class="bookmark-item bookmark-link">
@@ -78,7 +78,7 @@
             <section class="mb-4">
                 <div class="bookmark-grid">
                     <template v-if="isLoadingBottom">
-                        <div v-for="n in 6" :key="'skeleton-bottom-' + n" class="bookmark-column">
+                        <div v-for="n in 7" :key="'skeleton-bottom-' + n" class="bookmark-column">
                             <div class="skeleton w-20 h-5 mx-auto mb-3"></div>
                             <div v-for="i in 3" :key="'skeleton-item-' + n + '-' + i" class="skeleton bookmark-item"></div>
                         </div>
