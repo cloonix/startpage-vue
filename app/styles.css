@@ -48,7 +48,7 @@ body {
     100% { background-position: -200% 0; }
 }
 
-/* Base bookmark styling */
+/* Base interactive element styles */
 .bookmark-item, .search-result-item {
     background: var(--bg-secondary);
     border: 1px solid var(--border-subtle);
@@ -66,17 +66,40 @@ body {
 
 .search-result-item { height: auto; }
 
-/* Icon enhancements */
+/* Bookmark link styling */
+.bookmark-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+}
+
+@media (min-width: 640px) {
+    .bookmark-link { justify-content: flex-start; }
+}
+
+/* Icon and text styling */
 .bookmark-icon {
+    width: 20px;
+    height: 20px;
+    object-fit: cover;
     border-radius: 4px;
     border: 1px solid var(--border-subtle);
 }
 
-/* Text styling */
 .bookmark-text {
     font-size: 12px;
     font-weight: 500;
     color: var(--text-primary);
+    padding: 0 8px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    display: none;
+}
+
+@media (min-width: 640px) {
+    .bookmark-text { display: block; }
 }
 
 .section-title {
@@ -86,7 +109,7 @@ body {
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-/* Search input improvements */
+/* Input styling */
 .search-input {
     background: var(--bg-secondary);
     border: 1px solid var(--border-subtle);
@@ -113,20 +136,19 @@ body {
     max-width: 100%;
 }
 
-/* Responsive breakpoints - identical for both areas */
+/* Responsive breakpoints */
 @media (max-width: 1199px) { 
     .bookmark-grid { grid-template-columns: repeat(5, minmax(90px, 1fr)); }
 }
 @media (max-width: 767px) { 
     .bookmark-grid { grid-template-columns: repeat(4, minmax(65px, 1fr)); gap: 12px; }
     .bookmark-item { height: 40px; }
-    .bookmark-icon { width: 20px !important; height: 20px !important; }
 }
 @media (max-width: 480px) { 
     .bookmark-grid { grid-template-columns: repeat(6, minmax(35px, 1fr)); gap: 8px; }
-    .bookmark-item { height: 36px; justify-content: center; }
-    .bookmark-text { display: none !important; }
-    .bookmark-icon { width: 24px !important; height: 24px !important; }
+    .bookmark-item { height: 36px; }
+    .bookmark-link { justify-content: center; }
+    .bookmark-icon { width: 24px; height: 24px; }
 }
 
 /* Layout helpers */
@@ -137,7 +159,7 @@ body {
     min-width: 0;
 }
 
-/* Error and loading states */
+/* Status messages */
 .error-message {
     color: #ef4444;
     background: rgba(239, 68, 68, 0.1);
@@ -146,7 +168,6 @@ body {
     padding: 8px 12px;
 }
 
-/* Header improvements */
 .header-text {
     color: var(--text-secondary);
     font-size: 12px;

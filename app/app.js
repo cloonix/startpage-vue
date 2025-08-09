@@ -78,47 +78,51 @@ const app = Vue.createApp({
         sortByName(a, b) {
             return a.name.localeCompare(b.name);
         },
-        // Common API fetch method
-        async fetchAPI(params) {
-            const queryString = new URLSearchParams(params).toString();
-            const response = await fetch(`/api/bookmarks/?${queryString}`, {
-                method: 'GET',
-                headers: { 'Content-Type': 'application/json' }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`API request failed: ${response.statusText}`);
-            }
-            
+        // Create bookmark object from API response
+        createBookmark(item) {
+            return {
+                id: item.id,
+                name: item.title || item.url,
+                link: item.url,
+                icon: this.extractIcon(item.notes, item.url),
+                tags: item.tag_names || [],
+                description: item.description || ''
+            };
+        },
+
+        // Handle API errors with user-friendly messages
+        handleError(error, context = 'bookmarks') {
+            console.error(`Failed to load ${context}:`, error);
+            const message = error.message.includes('Failed to fetch') 
+                ? 'Unable to connect to server. Please check your connection.'
+                : error.message.includes('40') ? 'Authentication failed. Please check your API token.'
+                : `Failed to load ${context}: ${error.message}`;
+            if (context === 'bookmarks') this.errorMessage = message;
+        },
+
+        // Fetch bookmarks from API
+        async fetchFromAPI(params) {
+            const response = await fetch(`/api/bookmarks/?${new URLSearchParams(params)}`);
+            if (!response.ok) throw new Error(`API request failed: ${response.statusText}`);
             return response.json();
         },
         
-        // Extract icon from notes field with favicon fallback and caching
+        // Extract icon with caching and fallback
         extractIcon(notes, url) {
             const cacheKey = `${notes || ''}_${url || ''}`;
-            if (this.iconCache.has(cacheKey)) {
-                return this.iconCache.get(cacheKey);
-            }
+            if (this.iconCache.has(cacheKey)) return this.iconCache.get(cacheKey);
             
-            let iconUrl;
-            if (notes) {
-                const iconMatch = notes.match(/icon::(.+?)(?:\s|$)/);
-                if (iconMatch?.[1]?.trim()) {
-                    iconUrl = iconMatch[1].trim();
-                    this.iconCache.set(cacheKey, iconUrl);
-                    return iconUrl;
-                }
-            }
+            // Check for custom icon in notes
+            const iconMatch = notes?.match(/icon::(.+?)(?:\s|$)/);
+            let iconUrl = iconMatch?.[1]?.trim();
             
-            // Favicon fallback
-            if (url) {
+            if (!iconUrl && url) {
                 try {
-                    const domain = new URL(url).hostname;
-                    iconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=24`;
+                    iconUrl = `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=24`;
                 } catch {
                     iconUrl = 'https://placehold.co/24x24';
                 }
-            } else {
+            } else if (!iconUrl) {
                 iconUrl = 'https://placehold.co/24x24';
             }
             
@@ -126,45 +130,36 @@ const app = Vue.createApp({
             return iconUrl;
         },
         
-        // Highlight matching text (for use in computed properties)
+        // Highlight matching text
         highlightText(text, query) {
-            if (!query.trim() || !text) return text;
+            if (!query?.trim() || !text) return text;
             
             try {
-                const words = query.split(' ').filter(word => word.length > 0);
-                let result = text;
-                
-                words.forEach(word => {
-                    const regex = new RegExp(`(${word.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')})`, 'gi');
-                    result = result.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">$1</mark>');
-                });
-                
-                return result;
+                return query.split(' ')
+                    .filter(word => word.length > 0)
+                    .reduce((result, word) => {
+                        const escaped = word.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+                        return result.replace(new RegExp(`(${escaped})`, 'gi'), 
+                            '<mark class="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">$1</mark>');
+                    }, text);
             } catch {
                 return text;
             }
-},
+        },
         
-        // Fetches static bookmarks from Linkding API
-        async fetchStaticBookmarks(searchTerm, isTopSection = false) {
+        // Fetch static bookmarks by tag
+        async fetchStaticBookmarks(tag, isTopSection = false) {
             try {
-                const tagName = searchTerm.replace('#', '');
-                const data = await this.fetchAPI({ limit: '50', q: `#${tagName}` });
-                
+                const tagName = tag.replace('#', '');
+                const data = await this.fetchFromAPI({ limit: '50', q: `#${tagName}` });
                 const bookmarks = data?.results
                     ?.filter(item => item.tag_names?.includes(tagName))
-                    ?.map(item => ({
-                        id: item.id,
-                        name: item.title || item.url,
-                        link: item.url,
-                        icon: this.extractIcon(item.notes, item.url),
-                        tags: item.tag_names || []
-                    })) || [];
+                    ?.map(item => this.createBookmark(item)) || [];
                 
                 this.preloadIcons(bookmarks);
                 return bookmarks;
             } catch (error) {
-                console.error('Failed to load static bookmarks:', error);
+                this.handleError(error, 'static bookmarks');
                 return [];
             } finally {
                 if (isTopSection) this.isLoadingTop = false;
@@ -180,7 +175,7 @@ const app = Vue.createApp({
             });
         },
         
-        // Enhanced bookmark fetching with better error handling
+        // Fetch all bookmarks with search support
         async fetchBookmarks(query = '') {
             try {
                 this.isSearching = !!query;
@@ -189,51 +184,39 @@ const app = Vue.createApp({
                 const params = { limit: query ? '50' : '100' };
                 if (query) params.q = query;
                 
-                const data = await this.fetchAPI(params);
-                const bookmarks = data?.results?.map(item => ({
-                    id: item.id,
-                    name: item.title || item.url,
-                    link: item.url,
-                    icon: this.extractIcon(item.notes, item.url),
-                    tags: item.tag_names || [],
-                    description: item.description || ''
-                })) || [];
+                const data = await this.fetchFromAPI(params);
+                const bookmarks = data?.results?.map(item => this.createBookmark(item)) || [];
                 
                 this.bookmarks = bookmarks;
                 if (query && bookmarks.length <= 20) this.preloadIcons(bookmarks);
                 if (query && !bookmarks.length) this.errorMessage = `No bookmarks found for "${query}"`;
                 
             } catch (error) {
-                console.error('Fetch error:', error);
-                this.errorMessage = error.message.includes('Failed to fetch') 
-                    ? 'Unable to connect to Linkding server. Please check your connection.'
-                    : error.message.includes('40') ? 'Authentication failed. Please check your API token.'
-                    : `Failed to load bookmarks: ${error.message}`;
+                this.handleError(error);
                 this.bookmarks = [];
             } finally {
                 this.isSearching = false;
             }
         },
-        // Handles keyboard navigation and actions for the search results
+        // Handle keyboard navigation
         handleKeydown(event) {
-            const bookmarkList = this.searchQuery ? this.enhancedFilteredBookmarks : [];
-            
-            if (event.key === 'ArrowDown' && bookmarkList.length) {
-                this.selectedIndex = (this.selectedIndex + 1) % bookmarkList.length;
-            } else if (event.key === 'ArrowUp' && bookmarkList.length) {
-                this.selectedIndex = (this.selectedIndex - 1 + bookmarkList.length) % bookmarkList.length;
-            } else if (event.key === 'Enter') {
-                if (bookmarkList.length === 1 || this.selectedIndex >= 0) {
-                    const link = bookmarkList[this.selectedIndex]?.link || bookmarkList[0]?.link;
-                    if (link) window.location.href = link;
+            const bookmarks = this.searchQuery ? this.enhancedFilteredBookmarks : [];
+            const actions = {
+                ArrowDown: () => bookmarks.length && (this.selectedIndex = (this.selectedIndex + 1) % bookmarks.length),
+                ArrowUp: () => bookmarks.length && (this.selectedIndex = (this.selectedIndex - 1 + bookmarks.length) % bookmarks.length),
+                Enter: () => {
+                    const link = bookmarks[this.selectedIndex]?.link || bookmarks[0]?.link;
+                    if (link && (bookmarks.length === 1 || this.selectedIndex >= 0)) {
+                        window.location.href = link;
+                    }
+                },
+                Escape: () => {
+                    this.searchQuery = '';
+                    this.selectedIndex = -1;
+                    this.$nextTick(() => this.$refs.searchInput?.focus());
                 }
-            } else if (event.key === 'Escape') {
-                this.searchQuery = '';
-                this.selectedIndex = -1;
-                this.$nextTick(() => {
-                    this.$refs.searchInput?.focus();
-                });
-            }
+            };
+            actions[event.key]?.();
         }
     },
     watch: {

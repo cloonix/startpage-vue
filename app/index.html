@@ -56,42 +56,45 @@
             </div>
         </div>
         
-        <!-- Top Section Bookmarks -->
-        <section v-if="!searchQuery" class="mb-6">
-            <h2 class="section-title mb-3 text-center">self-hosted</h2>
-            <div class="bookmark-grid">
-                <!-- Loading skeleton for top section -->
-                <div v-if="isLoadingTop" v-for="n in 6" :key="'skeleton-top-' + n">
-                    <div class="skeleton bookmark-item"></div>
+        <!-- Static Bookmarks Sections -->
+        <template v-if="!searchQuery">
+            <!-- Top Section -->
+            <section class="mb-6">
+                <h2 class="section-title mb-3 text-center">self-hosted</h2>
+                <div class="bookmark-grid">
+                    <template v-if="isLoadingTop">
+                        <div v-for="n in 6" :key="'skeleton-top-' + n" class="skeleton bookmark-item"></div>
+                    </template>
+                    <template v-else>
+                        <a v-for="bookmark in sortedStaticBookmarksTop" :key="bookmark.id" :href="bookmark.link" class="bookmark-item bookmark-link">
+                            <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon" loading="lazy">
+                            <span class="bookmark-text">{{ bookmark.name }}</span>
+                        </a>
+                    </template>
                 </div>
-                <!-- Actual bookmarks -->
-                <a v-else v-for="bookmark in sortedStaticBookmarksTop" :key="bookmark.id" 
-                   :href="bookmark.link" class="bookmark-item flex items-center justify-center sm:justify-start px-2">
-                    <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon w-5 h-5 object-cover" loading="lazy">
-                    <span class="bookmark-text truncate px-2 hidden sm:block">{{ bookmark.name }}</span>
-                </a>
-            </div>
-        </section>
+            </section>
 
-        <!-- Bottom Section Bookmarks -->
-        <section v-if="!searchQuery" class="mb-4">
-            <div class="bookmark-grid">
-                <!-- Loading skeleton for bottom section -->
-                <div v-if="isLoadingBottom" v-for="n in 6" :key="'skeleton-bottom-' + n" class="bookmark-column">
-                    <div class="skeleton w-20 h-5 mx-auto mb-3"></div>
-                    <div v-for="i in 3" :key="'skeleton-item-' + n + '-' + i" class="skeleton bookmark-item"></div>
+            <!-- Bottom Section -->
+            <section class="mb-4">
+                <div class="bookmark-grid">
+                    <template v-if="isLoadingBottom">
+                        <div v-for="n in 6" :key="'skeleton-bottom-' + n" class="bookmark-column">
+                            <div class="skeleton w-20 h-5 mx-auto mb-3"></div>
+                            <div v-for="i in 3" :key="'skeleton-item-' + n + '-' + i" class="skeleton bookmark-item"></div>
+                        </div>
+                    </template>
+                    <template v-else>
+                        <div v-for="(bookmarks, tag) in groupedStaticBookmarksBottom" :key="tag" class="bookmark-column">
+                            <h3 class="section-title mb-3 text-center">{{ tag }}</h3>
+                            <a v-for="bookmark in bookmarks" :key="bookmark.id" :href="bookmark.link" class="bookmark-item bookmark-link">
+                                <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon" loading="lazy">
+                                <span class="bookmark-text">{{ bookmark.name }}</span>
+                            </a>
+                        </div>
+                    </template>
                 </div>
-                <!-- Actual bookmarks -->
-                <div v-else v-for="(bookmarks, tag) in groupedStaticBookmarksBottom" :key="tag" class="bookmark-column">
-                    <h3 class="section-title mb-3 text-center">{{ tag }}</h3>
-                    <a v-for="bookmark in bookmarks" :key="bookmark.id" :href="bookmark.link" 
-                       class="bookmark-item flex items-center justify-center sm:justify-start px-2">
-                        <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon w-5 h-5 object-cover" loading="lazy">
-                        <span class="bookmark-text truncate px-2 hidden sm:block">{{ bookmark.name }}</span>
-                    </a>
-                </div>
-            </div>
-        </section>
+            </section>
+        </template>
 
         <!-- Search Results Section -->
         <section v-else-if="searchQuery" class="mb-4">
@@ -106,10 +109,7 @@
                      @mouseover="selectedIndex = index">
                     <a :href="bookmark.link" class="block">
                         <div class="flex items-start gap-3">
-                            <img :src="bookmark.icon" 
-                                 :alt="bookmark.name" 
-                                 class="bookmark-icon w-5 h-5 object-cover flex-shrink-0 mt-0.5" 
-                                 loading="lazy">
+                            <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon flex-shrink-0 mt-0.5" loading="lazy">
                             <div class="flex-1 min-w-0">
                                 <h4 class="font-medium" style="color: var(--accent)" v-html="bookmark.highlightedName"></h4>
                                 <div v-if="bookmark.description" class="text-sm mt-1" style="color: var(--text-secondary)" v-html="bookmark.highlightedDescription"></div>
