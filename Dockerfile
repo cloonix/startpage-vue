@@ -15,13 +15,15 @@ RUN chmod +x /entrypoint.sh
 
 # Build arguments for cache busting and versioning
 ARG APP_HASH
+ARG CSS_HASH
 ARG VERSION
 ENV APP_HASH=${APP_HASH}
+ENV CSS_HASH=${CSS_HASH}
 ENV VERSION=${VERSION}
 
 # Replace placeholders in files
 RUN find /usr/share/nginx/html -name "*.html" -type f -exec \
-    sed -i -e "s/APP_HASH/${APP_HASH}/g" -e "s/VERSION_PLACEHOLDER/${VERSION}/g" {} \; && \
+    sed -i -e "s/APP_HASH/${APP_HASH}/g" -e "s/CSS_HASH/${CSS_HASH}/g" -e "s/VERSION_PLACEHOLDER/${VERSION}/g" {} \; && \
     find /usr/share/nginx/html -name "*.css" -type f -exec \
     sed -i "s/APP_HASH/${APP_HASH}/g" {} \;
 
