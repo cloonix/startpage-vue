@@ -13,13 +13,15 @@ COPY nginx.conf.template /etc/nginx/nginx.conf.template
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Build argument for cache busting
+# Build arguments for cache busting and versioning
 ARG APP_HASH
+ARG VERSION
 ENV APP_HASH=${APP_HASH}
+ENV VERSION=${VERSION}
 
-# Replace APP_HASH in HTML and CSS files
+# Replace placeholders in files
 RUN find /usr/share/nginx/html -name "*.html" -type f -exec \
-    sed -i "s/APP_HASH/${APP_HASH}/g" {} \; && \
+    sed -i -e "s/APP_HASH/${APP_HASH}/g" -e "s/VERSION_PLACEHOLDER/${VERSION}/g" {} \; && \
     find /usr/share/nginx/html -name "*.css" -type f -exec \
     sed -i "s/APP_HASH/${APP_HASH}/g" {} \;
 
