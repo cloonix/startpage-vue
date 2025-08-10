@@ -59,7 +59,7 @@
         <!-- Static Bookmarks Sections -->
         <template v-if="!searchQuery">
             <!-- Top Section -->
-            <section class="mb-6">
+            <section class="mb-4 self-hosted-section">
                 <h2 class="section-title mb-3 text-center">self-hosted</h2>
                 <div class="bookmark-grid">
                     <template v-if="isLoadingTop">
@@ -75,7 +75,7 @@
             </section>
 
             <!-- Bottom Section -->
-            <section class="mb-4">
+            <section class="m-4">
                 <div class="bookmark-grid">
                     <template v-if="isLoadingBottom">
                         <div v-for="n in 7" :key="'skeleton-bottom-' + n" class="bookmark-column">
@@ -85,7 +85,7 @@
                     </template>
                     <template v-else>
                         <div v-for="(bookmarks, tag) in groupedStaticBookmarksBottom" :key="tag" class="bookmark-column">
-                            <h3 class="section-title mb-3 text-center">{{ tag }}</h3>
+                            <h3 class="section-title text-center">{{ tag }}</h3>
                             <a v-for="bookmark in bookmarks" :key="bookmark.id" :href="bookmark.link" class="bookmark-item bookmark-link">
                                 <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon" loading="lazy">
                                 <span class="bookmark-text">{{ bookmark.name }}</span>
