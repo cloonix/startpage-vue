@@ -175,21 +175,26 @@ const app = Vue.createApp({
             });
         },
         
-        // Fetch all bookmarks with search support
+        // Fetch all bookmarks with search support - only when query is provided
         async fetchBookmarks(query = '') {
+            if (!query.trim()) {
+                this.bookmarks = [];
+                this.errorMessage = '';
+                return;
+            }
+            
             try {
-                this.isSearching = !!query;
+                this.isSearching = true;
                 this.errorMessage = '';
                 
-                const params = { limit: query ? '50' : '100' };
-                if (query) params.q = query;
+                const params = { limit: '50', q: query };
                 
                 const data = await this.fetchFromAPI(params);
                 const bookmarks = data?.results?.map(item => this.createBookmark(item)) || [];
                 
                 this.bookmarks = bookmarks;
-                if (query && bookmarks.length <= 20) this.preloadIcons(bookmarks);
-                if (query && !bookmarks.length) this.errorMessage = `No bookmarks found for "${query}"`;
+                if (bookmarks.length <= 20) this.preloadIcons(bookmarks);
+                if (!bookmarks.length) this.errorMessage = `No bookmarks found for "${query}"`;
                 
             } catch (error) {
                 this.handleError(error);
@@ -226,7 +231,12 @@ const app = Vue.createApp({
             clearTimeout(this.searchTimeout);
             
             this.searchTimeout = setTimeout(() => {
-                this.fetchBookmarks(newQuery.length >= 2 ? newQuery : '');
+                if (newQuery.length >= 2) {
+                    this.fetchBookmarks(newQuery);
+                } else {
+                    this.bookmarks = [];
+                    this.errorMessage = '';
+                }
             }, 200);
         }
     },
@@ -249,10 +259,6 @@ const app = Vue.createApp({
                 });
         }, 100);
         
-        // Load search bookmarks in background after sections are loaded
-        setTimeout(() => {
-            this.fetchBookmarks();
-        }, 200);
     },
     beforeUnmount() {
         window.removeEventListener('keydown', this.handleKeydown);
