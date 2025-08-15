@@ -1,3 +1,4 @@
+*.bak
 # Environment variables
 .env
 .env.local
@@ -32,3 +33,6 @@ entrypoint-production.sh
 proxy-server.js
 package*.json
 node_modules/
+
+# Local AI agent state
+.crush/

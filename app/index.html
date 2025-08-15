@@ -7,40 +7,30 @@
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="preconnect" href="https://placehold.co">
-    <link rel="stylesheet" href="styles.css?t=CSS_HASH">
+    <link rel="stylesheet" href="styles.css">
 </head>
 
 <body class="flex flex-col items-center p-4">
     <div id="app" class="w-full max-w-6xl">
-        <!-- Header Section -->
+        <!-- Header -->
         <header class="mb-4 text-center">
             <p class="header-text">Use ↑↓← → to navigate • Enter to open • Esc to reset</p>
         </header>
         
-        <!-- Error Messages -->
-        <section v-if="errorMessage" class="mb-4 text-center">
-            <div class="error-message">{{ errorMessage }}</div>
-        </section>
-        
-        <!-- Search Section -->
+        <!-- Search -->
         <section class="mb-4 flex justify-center px-4">
             <div class="relative w-full max-w-lg">
-                <input 
-                    v-model="searchQuery" 
-                    ref="searchInput" 
-                    type="text" 
-                    id="search" 
-                    placeholder="Search bookmarks..." 
-                    class="search-input w-full px-4 py-2 pl-10 focus:outline-none">
-                <svg v-if="!isSearching" class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style="color: var(--text-muted)" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <input v-model="store.search.query" ref="searchInput" type="text" placeholder="Search bookmarks..." 
+                       class="search-input w-full px-4 py-2 pl-10 focus:outline-none">
+                <svg v-if="store.search.status !== 'loading'" class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style="color: var(--text-muted)" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                 </svg>
                 <div v-else class="absolute left-3 top-1/2 transform -translate-y-1/2">
                     <div class="spinner" style="color: var(--text-muted)"></div>
                 </div>
-                <button v-if="searchQuery" @click="searchQuery = ''; selectedIndex = -1" 
+                <button v-if="store.search.query" @click="store.search.query = ''; selectedIndex = -1" 
                         class="absolute right-3 top-1/2 transform -translate-y-1/2 transition-colors" 
-                        style="color: var(--text-muted); &:hover { color: var(--text-secondary) }">
+                        style="color: var(--text-muted)">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
                     </svg>
@@ -48,74 +38,127 @@
             </div>
         </section>
 
-        <!-- Loading State -->
-        <div v-if="isLoading" class="flex items-center justify-center py-12">
-            <div class="text-center">
-                <div class="spinner mx-auto mb-4 w-8 h-8 text-gray-400"></div>
-                <p class="text-gray-400 text-sm">Loading bookmarks...</p>
-            </div>
-        </div>
-        
-        <!-- Static Bookmarks Sections -->
-        <template v-if="!searchQuery">
+        <!-- Static Bookmarks -->
+        <template v-if="!store.search.query">
             <!-- Top Section -->
             <section class="mb-4 self-hosted-section">
                 <h2 class="section-title mb-3 text-center">self-hosted</h2>
                 <div class="bookmark-grid">
-                    <template v-if="isLoadingTop">
+                    <template v-if="store.sections.top.status === 'loading'">
                         <div v-for="n in 7" :key="'skeleton-top-' + n" class="skeleton bookmark-item"></div>
                     </template>
                     <template v-else>
-                        <a v-for="bookmark in sortedStaticBookmarksTop" :key="bookmark.id" :href="bookmark.link" class="bookmark-item bookmark-link">
-                            <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon" loading="lazy">
+                        <div v-for="bookmark in sortedTopBookmarks" :key="bookmark.id" 
+                             class="bookmark-item bookmark-link draggable"
+                             :class="{ 'dragging': dragState.draggedItem?.id === bookmark.id }"
+                             :data-bookmark-id="bookmark.id" 
+                             :data-group="'startpage-top'"
+                             @mousedown="onMouseDown($event, bookmark, 'bookmark', 'startpage-top')">
+                            <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon" loading="lazy" 
+                                 @error="handleImageError($event, bookmark)">
                             <span class="bookmark-text">{{ bookmark.name }}</span>
-                        </a>
+                        </div>
+                        <!-- Drop zone for top section -->
+                        <div v-if="dragState.isDragging" 
+                             class="bookmark-item drop-zone"
+                             :data-group="'startpage-top'">
+                            <div class="drop-zone-content">Drop here to add to top</div>
+                        </div>
                     </template>
+                </div>
+            </section>
+
+            <!-- Drop Zones (between top and bottom sections) -->
+            <section v-if="dragState.isDragging && dragState.draggedType === 'bookmark'" 
+                     class="drop-zones-section mb-6">
+                <div class="drop-zones-container">
+                    <!-- New Group Creation -->
+                    <div class="drop-zone-item" data-group="__NEW_GROUP__">
+                        <div class="drop-zone-area">
+                            <div class="drop-zone-icon-wrapper new-group">
+                                <svg class="drop-zone-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                          d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                </svg>
+                            </div>
+                            <div class="drop-zone-text">
+                                <h3 class="drop-zone-title">Create New Group</h3>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Update Icon -->
+                    <div class="drop-zone-item" data-action="__UPDATE_ICON__">
+                        <div class="drop-zone-area">
+                            <div class="drop-zone-icon-wrapper update-icon">
+                                <svg class="drop-zone-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                            </div>
+                            <div class="drop-zone-text">
+                                <h3 class="drop-zone-title">Update Icon</h3>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
             <!-- Bottom Section -->
             <section class="m-4">
                 <div class="bookmark-grid">
-                    <template v-if="isLoadingBottom">
+                    <template v-if="store.sections.bottom.status === 'loading'">
                         <div v-for="n in 7" :key="'skeleton-bottom-' + n" class="bookmark-column">
                             <div class="skeleton w-20 h-5 mx-auto mb-3"></div>
                             <div v-for="i in 3" :key="'skeleton-item-' + n + '-' + i" class="skeleton bookmark-item"></div>
                         </div>
                     </template>
                     <template v-else>
-                        <div v-for="(bookmarks, tag) in groupedStaticBookmarksBottom" :key="tag" class="bookmark-column">
-                            <h3 class="section-title text-center">{{ tag }}</h3>
-                            <a v-for="bookmark in bookmarks" :key="bookmark.id" :href="bookmark.link" class="bookmark-item bookmark-link">
-                                <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon" loading="lazy">
+                        <div v-for="(bookmarks, tag) in groupedBottomBookmarks" :key="tag" 
+                             class="bookmark-column" :data-group="tag">
+                            <h3 class="section-title text-center column-header">
+                                {{ tag }}
+                            </h3>
+                            <div v-for="bookmark in bookmarks" :key="bookmark.id" 
+                                 class="bookmark-item bookmark-link draggable"
+                                 :class="{ 'dragging': dragState.draggedItem?.id === bookmark.id }"
+                                 :data-bookmark-id="bookmark.id" 
+                                 :data-group="tag"
+                                 @mousedown="onMouseDown($event, bookmark, 'bookmark', tag)">
+                                <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon" loading="lazy" 
+                                     @error="handleImageError($event, bookmark)">
                                 <span class="bookmark-text">{{ bookmark.name }}</span>
-                            </a>
+                            </div>
+                            <!-- Drop zone for each group -->
+                            <div v-if="dragState.isDragging" 
+                                 class="bookmark-item drop-zone"
+                                 :data-group="tag">
+                                <div class="drop-zone-content">Drop here to add to {{ tag }}</div>
+                            </div>
                         </div>
                     </template>
                 </div>
             </section>
         </template>
 
-        <!-- Search Results Section -->
-        <section v-else-if="searchQuery" class="mb-4">
-            <div v-if="enhancedFilteredBookmarks.length" class="space-y-1">
+        <!-- Search Results -->
+        <section v-else-if="store.search.query" class="mb-4">
+            <div v-if="searchResults.length" class="space-y-1">
                 <div class="header-text mb-3 px-2">
-                    {{ enhancedFilteredBookmarks.length }} result{{ enhancedFilteredBookmarks.length !== 1 ? 's' : '' }} for "{{ searchQuery }}"
+                    {{ searchResults.length }} result{{ searchResults.length !== 1 ? 's' : '' }} for "{{ store.search.query }}"
                 </div>
-                <div v-for="(bookmark, index) in enhancedFilteredBookmarks" 
-                     :key="bookmark.id" 
-                     :class="['search-result-item p-3 transition-colors duration-200', 
-                              index === selectedIndex ? 'selected' : '']"
+                <div v-for="(bookmark, index) in searchResults" :key="bookmark.id" 
+                     :class="['search-result-item p-3 transition-colors duration-200', index === selectedIndex ? 'selected' : '']"
                      @mouseover="selectedIndex = index">
                     <a :href="bookmark.link" class="block">
                         <div class="flex items-start gap-3">
-                            <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon flex-shrink-0 mt-0.5" loading="lazy">
+                            <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon flex-shrink-0 mt-0.5" loading="lazy" 
+                                 @error="handleImageError($event, bookmark)">
                             <div class="flex-1 min-w-0">
                                 <h4 class="font-medium" style="color: var(--accent)" v-html="bookmark.highlightedName"></h4>
                                 <div v-if="bookmark.description" class="text-sm mt-1" style="color: var(--text-secondary)" v-html="bookmark.highlightedDescription"></div>
                                 <div v-if="bookmark.tags && bookmark.tags.length" class="mt-1">
-                                    <span v-for="tag in bookmark.tags" 
-                                          :key="tag" 
+                                    <span v-for="tag in bookmark.tags" :key="tag" 
                                           class="px-1 py-[2px] rounded text-xs mr-1" 
                                           style="background: var(--bg-tertiary); color: var(--text-secondary)">
                                         #{{ tag }}
@@ -126,8 +169,8 @@
                     </a>
                 </div>
             </div>
-            <div v-else-if="!isSearching" class="text-center p-4" style="color: var(--text-secondary)">
-                No bookmarks found matching your search.
+            <div v-else-if="store.search.status !== 'loading'" class="text-center p-4" style="color: var(--text-secondary)">
+                No bookmarks found.
             </div>
         </section>
 
@@ -139,7 +182,6 @@
         </footer>
     </div>
 
-    <!-- Add hash to prevent caching -->
-    <script src="app.js?t=979af0db1bef7bfb6cd6e29da0511181"></script>
+    <script src="app.js"></script>
 </body>
 </html>

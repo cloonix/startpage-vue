@@ -1,269 +1,735 @@
-const app = Vue.createApp({
-    data() {
-        return {
-            searchQuery: '',
-            bookmarks: [],
-            staticBookmarksBottom: [],
-            staticBookmarksTop: [],
-            selectedIndex: -1,
-            isLoading: false,
-            isLoadingTop: true,
-            isLoadingBottom: true,
-            isSearching: false,
-            errorMessage: '',
-            searchResults: [],
-            highlightedQuery: '',
-            iconCache: new Map()
-        };
-    },
-    computed: {
-        // Simplified search with basic relevance scoring
-        filteredBookmarks() {
-            if (!this.searchQuery.trim()) return this.bookmarks;
-            
-            const query = this.searchQuery.toLowerCase();
-            this.highlightedQuery = this.searchQuery;
-            
-            return this.bookmarks.filter(bookmark => {
-                const title = bookmark.name.toLowerCase();
-                const tags = bookmark.tags?.join(' ').toLowerCase() || '';
-                const desc = bookmark.description?.toLowerCase() || '';
-                return title.includes(query) || tags.includes(query) || desc.includes(query);
-            }).sort((a, b) => {
-                const titleA = a.name.toLowerCase();
-                const titleB = b.name.toLowerCase();
-                // Prioritize exact matches, then starts-with, then alphabetical
-                const exactA = titleA === query ? 1000 : titleA.startsWith(query) ? 100 : 1;
-                const exactB = titleB === query ? 1000 : titleB.startsWith(query) ? 100 : 1;
-                return exactB - exactA || titleA.localeCompare(titleB);
-            });
-        },
-        // Groups and sorts static bookmarks for the bottom section by tags
-        groupedStaticBookmarksBottom() {
-            const bookmarks = this.validateArray(this.staticBookmarksBottom);
-            const grouped = bookmarks.reduce((groups, bookmark) => {
-                bookmark.tags?.forEach(tag => {
-                    if (tag !== 'startpage-bottom') {
-                        (groups[tag] = groups[tag] || []).push(bookmark);
-                    }
-                });
-                return groups;
-            }, {});
-            
-            return Object.keys(grouped).sort().reduce((result, tag) => {
-                result[tag] = grouped[tag].sort(this.sortByName);
-                return result;
-            }, {});
-        },
-        // Returns sorted static bookmarks for the top section
-        sortedStaticBookmarksTop() {
-            return this.validateArray(this.staticBookmarksTop).sort(this.sortByName);
-        },
-        
-        // Enhanced filtered bookmarks with highlighting
-        enhancedFilteredBookmarks() {
-            return this.filteredBookmarks.map(bookmark => ({
-                ...bookmark,
-                highlightedName: this.highlightText(bookmark.name, this.highlightedQuery),
-                highlightedDescription: this.highlightText(bookmark.description, this.highlightedQuery)
-            }));
-        }
-    },
-    methods: {
-        // Array validation helper
-        validateArray(arr) {
-            return arr && Array.isArray(arr) ? arr : [];
-        },
-        // Helper method to sort bookmarks alphabetically by name
-        sortByName(a, b) {
-            return a.name.localeCompare(b.name);
-        },
-        // Create bookmark object from API response
-        createBookmark(item) {
-            return {
-                id: item.id,
-                name: item.title || item.url,
-                link: item.url,
-                icon: this.extractIcon(item.notes, item.url),
-                tags: item.tag_names || [],
-                description: item.description || ''
-            };
-        },
+const { createApp } = Vue;
 
-        // Handle API errors with user-friendly messages
-        handleError(error, context = 'bookmarks') {
-            console.error(`Failed to load ${context}:`, error);
-            const message = error.message.includes('Failed to fetch') 
-                ? 'Unable to connect to server. Please check your connection.'
-                : error.message.includes('40') ? 'Authentication failed. Please check your API token.'
-                : `Failed to load ${context}: ${error.message}`;
-            if (context === 'bookmarks') this.errorMessage = message;
+createApp({
+  data() {
+    return {
+      // Core application state
+      store: {
+        sections: {
+          top: { items: [], status: 'loading', error: '' },
+          bottom: { items: [], status: 'loading', error: '' }
         },
-
-        // Fetch bookmarks from API
-        async fetchFromAPI(params) {
-            const response = await fetch(`/api/bookmarks/?${new URLSearchParams(params)}`);
-            if (!response.ok) throw new Error(`API request failed: ${response.statusText}`);
-            return response.json();
-        },
+        search: { query: '', results: [], status: 'idle', error: '' },
+        meta: { loadedAt: null }
+      },
+      
+      // UI state
+      selectedIndex: -1,
+      highlightedQuery: '',
+      
+      // Caching and performance
+      iconCache: new Map(),
+      controllers: { search: null },
+      timers: { search: null },
+      
+      // Drag and drop state
+      dragState: {
+        isDragging: false,
+        draggedItem: null,
+        draggedType: null,
+        draggedFrom: null,
+        startX: 0,
+        startY: 0,
+        preview: null
+      }
+    };
+  },
+  
+  computed: {
+    // Alphabetically sorted groups with alphabetically sorted bookmarks
+    groupedBottomBookmarks() {
+      const bookmarks = this.store.sections.bottom.items || [];
+      const grouped = {};
+      
+      bookmarks.forEach(bookmark => {
+        const jsonData = this.parseBookmarkNotes(bookmark.notes);
+        const group = jsonData?.group || 'default';
         
-        // Extract icon with caching and fallback
-        extractIcon(notes, url) {
-            const cacheKey = `${notes || ''}_${url || ''}`;
-            if (this.iconCache.has(cacheKey)) return this.iconCache.get(cacheKey);
-            
-            // Check for custom icon in notes
-            const iconMatch = notes?.match(/icon::(.+?)(?:\s|$)/);
-            let iconUrl = iconMatch?.[1]?.trim();
-            
-            if (!iconUrl && url) {
-                try {
-                    iconUrl = `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=24`;
-                } catch {
-                    iconUrl = 'https://placehold.co/24x24';
-                }
-            } else if (!iconUrl) {
-                iconUrl = 'https://placehold.co/24x24';
-            }
-            
-            this.iconCache.set(cacheKey, iconUrl);
-            return iconUrl;
-        },
-        
-        // Highlight matching text
-        highlightText(text, query) {
-            if (!query?.trim() || !text) return text;
-            
-            try {
-                return query.split(' ')
-                    .filter(word => word.length > 0)
-                    .reduce((result, word) => {
-                        const escaped = word.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
-                        return result.replace(new RegExp(`(${escaped})`, 'gi'), 
-                            '<mark class="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">$1</mark>');
-                    }, text);
-            } catch {
-                return text;
-            }
-        },
-        
-        // Fetch static bookmarks by tag
-        async fetchStaticBookmarks(tag, isTopSection = false) {
-            try {
-                const tagName = tag.replace('#', '');
-                const data = await this.fetchFromAPI({ limit: '50', q: `#${tagName}` });
-                const bookmarks = data?.results
-                    ?.filter(item => item.tag_names?.includes(tagName))
-                    ?.map(item => this.createBookmark(item)) || [];
-                
-                this.preloadIcons(bookmarks);
-                return bookmarks;
-            } catch (error) {
-                this.handleError(error, 'static bookmarks');
-                return [];
-            } finally {
-                if (isTopSection) this.isLoadingTop = false;
-                else this.isLoadingBottom = false;
-            }
-        },
-        
-        // Preload icons for better performance
-        preloadIcons(bookmarks, limit = 8) {
-            bookmarks.slice(0, limit).forEach(bookmark => {
-                const img = new Image();
-                img.src = bookmark.icon;
-            });
-        },
-        
-        // Fetch all bookmarks with search support - only when query is provided
-        async fetchBookmarks(query = '') {
-            if (!query.trim()) {
-                this.bookmarks = [];
-                this.errorMessage = '';
-                return;
-            }
-            
-            try {
-                this.isSearching = true;
-                this.errorMessage = '';
-                
-                const params = { limit: '50', q: query };
-                
-                const data = await this.fetchFromAPI(params);
-                const bookmarks = data?.results?.map(item => this.createBookmark(item)) || [];
-                
-                this.bookmarks = bookmarks;
-                if (bookmarks.length <= 20) this.preloadIcons(bookmarks);
-                if (!bookmarks.length) this.errorMessage = `No bookmarks found for "${query}"`;
-                
-            } catch (error) {
-                this.handleError(error);
-                this.bookmarks = [];
-            } finally {
-                this.isSearching = false;
-            }
-        },
-        // Handle keyboard navigation
-        handleKeydown(event) {
-            const bookmarks = this.searchQuery ? this.enhancedFilteredBookmarks : [];
-            const actions = {
-                ArrowDown: () => bookmarks.length && (this.selectedIndex = (this.selectedIndex + 1) % bookmarks.length),
-                ArrowUp: () => bookmarks.length && (this.selectedIndex = (this.selectedIndex - 1 + bookmarks.length) % bookmarks.length),
-                Enter: () => {
-                    const link = bookmarks[this.selectedIndex]?.link || bookmarks[0]?.link;
-                    if (link && (bookmarks.length === 1 || this.selectedIndex >= 0)) {
-                        window.location.href = link;
-                    }
-                },
-                Escape: () => {
-                    this.searchQuery = '';
-                    this.selectedIndex = -1;
-                    this.$nextTick(() => this.$refs.searchInput?.focus());
-                }
-            };
-            actions[event.key]?.();
-        }
+        if (!grouped[group]) grouped[group] = [];
+        grouped[group].push(bookmark);
+      });
+      
+      // Sort groups and bookmarks alphabetically
+      const sorted = {};
+      Object.keys(grouped).sort().forEach(key => {
+        sorted[key] = grouped[key].sort((a, b) => a.name.localeCompare(b.name));
+      });
+      
+      return sorted;
     },
-    watch: {
-        // Debounced search with optimized timing
-        searchQuery(newQuery) {
-            this.selectedIndex = -1;
-            clearTimeout(this.searchTimeout);
-            
-            this.searchTimeout = setTimeout(() => {
-                if (newQuery.length >= 2) {
-                    this.fetchBookmarks(newQuery);
-                } else {
-                    this.bookmarks = [];
-                    this.errorMessage = '';
-                }
-            }, 200);
-        }
+    
+    // Alphabetically sorted top bookmarks
+    sortedTopBookmarks() {
+      return [...(this.store.sections.top.items || [])]
+        .sort((a, b) => a.name.localeCompare(b.name));
     },
-    async mounted() {
-        // Set up event listeners and focus immediately
-        window.addEventListener('keydown', this.handleKeydown);
-        this.$nextTick(() => this.$refs.searchInput?.focus());
-        
-        // Load top section first (most important)
-        this.fetchStaticBookmarks('#startpage-top', true)
-            .then(bookmarks => {
-                this.staticBookmarksTop = bookmarks;
-            });
-        
-        // Load bottom section after a short delay
-        setTimeout(() => {
-            this.fetchStaticBookmarks('#startpage-bottom', false)
-                .then(bookmarks => {
-                    this.staticBookmarksBottom = bookmarks;
-                });
-        }, 100);
-        
-    },
-    beforeUnmount() {
-        window.removeEventListener('keydown', this.handleKeydown);
-        clearTimeout(this.searchTimeout);
+    
+    // Enhanced search results with highlighting
+    searchResults() {
+      const query = this.store.search.query.trim();
+      if (!query) return [];
+      
+      this.highlightedQuery = query;
+      const normalizedQuery = query.toLowerCase();
+      
+      return this.store.search.results
+        .map(item => ({ item, score: this.calculateScore(normalizedQuery, item) }))
+        .filter(x => x.score > 0)
+        .sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name))
+        .map(({ item }) => ({
+          ...item,
+          highlightedName: this.highlightText(item.name, query),
+          highlightedDescription: this.highlightText(item.description, query)
+        }));
     }
-});
-
-app.mount('#app');
+  },
+  
+  methods: {
+    // API METHODS
+    async apiCall(path, options = {}) {
+      const { signal, params, timeout = 10000, retry = 1 } = options;
+      const url = new URL(path, window.location.origin);
+      
+      if (params) {
+        Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+      }
+      
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
+      
+      if (signal) {
+        signal.addEventListener('abort', () => controller.abort(), { once: true });
+      }
+      
+      const attempt = async (retryCount = 0) => {
+        try {
+          const response = await fetch(url, {
+            signal: controller.signal,
+            headers: { 'Accept': 'application/json' }
+          });
+          
+          clearTimeout(timer);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          
+          return response.json();
+        } catch (error) {
+          clearTimeout(timer);
+          
+          if (error.name === 'AbortError' || retryCount >= retry) {
+            throw error;
+          }
+          
+          // Retry on network errors
+          if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+            await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300));
+            return attempt(retryCount + 1);
+          }
+          
+          throw error;
+        }
+      };
+      
+      return attempt();
+    },
+    
+    async updateBookmark(bookmarkId, data) {
+      const response = await fetch(`/api/bookmarks/${bookmarkId}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to update bookmark: ${response.status}`);
+      }
+      
+      return response.json();
+    },
+    
+    // BOOKMARK METHODS
+    createBookmark(apiItem) {
+      return {
+        id: apiItem.id,
+        name: apiItem.title || apiItem.url,
+        link: apiItem.url,
+        icon: this.resolveIcon(apiItem.notes, apiItem.url),
+        tags: apiItem.tag_names || [],
+        description: apiItem.description || '',
+        notes: apiItem.notes || ''
+      };
+    },
+    
+    parseBookmarkNotes(notes) {
+      if (!notes?.trim()) return null;
+      
+      try {
+        const cleanNotes = notes.replace(/icon::[^\s]+\s*/, '').trim();
+        if (cleanNotes.startsWith('{') && cleanNotes.endsWith('}')) {
+          return JSON.parse(cleanNotes);
+        }
+      } catch {
+        // Invalid JSON, return null
+      }
+      
+      return null;
+    },
+    
+    createBookmarkNotes(section, group, iconUrl) {
+      return JSON.stringify({
+        section,
+        group: group || 'default',
+        icon: iconUrl || this.getPlaceholderIcon()
+      });
+    },
+    
+    async updateBookmarkNotes(bookmark, section, group, customIconUrl = null) {
+      try {
+        const currentIcon = customIconUrl || this.extractIconFromNotes(bookmark.notes, bookmark.link);
+        const newNotes = this.createBookmarkNotes(section, group, currentIcon);
+        
+        const updated = await this.updateBookmark(bookmark.id, { notes: newNotes });
+        this.updateLocalCache(bookmark.id, updated);
+        
+        return updated;
+      } catch (error) {
+        console.error('Failed to update bookmark notes:', error);
+        return null;
+      }
+    },
+    
+    // ICON METHODS
+    resolveIcon(notes, url) {
+      const cacheKey = `${notes || ''}__${url || ''}`;
+      if (this.iconCache.has(cacheKey)) {
+        return this.iconCache.get(cacheKey);
+      }
+      
+      let iconUrl = '';
+      
+      // Try JSON format first
+      const jsonData = this.parseBookmarkNotes(notes);
+      if (jsonData?.icon) {
+        iconUrl = this.validateIconUrl(jsonData.icon, url);
+      }
+      
+      // Fallback to old icon:: format
+      if (!iconUrl && notes) {
+        const match = notes.match(/icon::([^\s]+)/);
+        if (match) {
+          iconUrl = this.validateIconUrl(match[1], url);
+        }
+      }
+      
+      // Final fallback: domain favicon or placeholder
+      if (!iconUrl) {
+        iconUrl = this.getFaviconUrl(url) || this.getPlaceholderIcon();
+      }
+      
+      this.iconCache.set(cacheKey, iconUrl);
+      return iconUrl;
+    },
+    
+    validateIconUrl(iconUrl, baseUrl) {
+      try {
+        const url = new URL(iconUrl, baseUrl);
+        return (url.protocol === 'http:' || url.protocol === 'https:') ? url.toString() : '';
+      } catch {
+        return '';
+      }
+    },
+    
+    getFaviconUrl(url) {
+      try {
+        const host = new URL(url).hostname;
+        return `https://www.google.com/s2/favicons?domain=${host}&sz=32`;
+      } catch {
+        return null;
+      }
+    },
+    
+    getPlaceholderIcon() {
+      return 'https://placehold.co/32x32/666/fff?text=?';
+    },
+    
+    extractIconFromNotes(notes, url) {
+      const jsonData = this.parseBookmarkNotes(notes);
+      if (jsonData?.icon) return jsonData.icon;
+      
+      const match = notes?.match(/icon::([^\s]+)/);
+      if (match) return match[1];
+      
+      return this.getPlaceholderIcon();
+    },
+    
+    handleImageError(event, bookmark) {
+      const img = event.target;
+      
+      if (!img.dataset.fallback1) {
+        img.dataset.fallback1 = '1';
+        img.src = this.getFaviconUrl(bookmark.link) || this.getPlaceholderIcon();
+      } else if (!img.dataset.fallback2) {
+        img.dataset.fallback2 = '1';
+        img.src = this.getPlaceholderIcon();
+      }
+    },
+    
+    // SEARCH METHODS
+    calculateScore(query, item) {
+      const title = item.name.toLowerCase();
+      const desc = (item.description || '').toLowerCase();
+      const tags = (item.tags || []).join(' ').toLowerCase();
+      const host = this.getHostname(item.link);
+      
+      if (title === query) return 1000;
+      if (title.startsWith(query)) return 500;
+      
+      let score = 0;
+      if (title.includes(query)) score += 120;
+      if (host.includes(query)) score += 80;
+      if (tags.includes(query)) score += 40;
+      if (desc.includes(query)) score += 20;
+      
+      return score;
+    },
+    
+    getHostname(url) {
+      try {
+        return new URL(url).hostname.toLowerCase();
+      } catch {
+        return '';
+      }
+    },
+    
+    highlightText(text, query) {
+      if (!query?.trim() || !text) return text;
+      
+      try {
+        return query.split(' ')
+          .filter(Boolean)
+          .reduce((result, word) => {
+            const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return result.replace(
+              new RegExp(`(${escaped})`, 'gi'),
+              '<mark class="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">$1</mark>'
+            );
+          }, text);
+      } catch {
+        return text;
+      }
+    },
+    
+    async searchBookmarks(query) {
+      const normalizedQuery = query.trim().toLowerCase();
+      
+      if (normalizedQuery.length < 2) {
+        this.store.search = { query: '', results: [], status: 'idle', error: '' };
+        return;
+      }
+      
+      if (this.controllers.search) {
+        this.controllers.search.abort();
+      }
+      
+      const controller = new AbortController();
+      this.controllers.search = controller;
+      this.store.search.status = 'loading';
+      this.store.search.error = '';
+      
+      try {
+        const data = await this.apiCall('/api/bookmarks/', {
+          params: { limit: '100', q: normalizedQuery },
+          signal: controller.signal
+        });
+        
+        const results = (data?.results || []).map(item => this.createBookmark(item));
+        this.store.search.results = results;
+        
+        if (results.length <= 20) {
+          this.preloadIcons(results);
+        }
+        
+        this.store.search.status = 'success';
+        this.store.meta.loadedAt = new Date().toISOString();
+      } catch (error) {
+        if (error.name === 'AbortError') return;
+        
+        this.store.search.results = [];
+        this.store.search.status = 'error';
+        this.store.search.error = error.message || 'Search failed';
+      } finally {
+        if (this.controllers.search === controller) {
+          this.controllers.search = null;
+        }
+      }
+    },
+    
+    // LOADING METHODS
+    async fetchBookmarksByTag(tag) {
+      try {
+        const tagName = tag.replace('#', '');
+        let allBookmarks = [];
+        let nextUrl = `/api/bookmarks/?limit=100&q=${encodeURIComponent(`#${tagName}`)}`;
+        
+        // Fetch all pages of bookmarks
+        while (nextUrl) {
+          const data = await this.apiCall(nextUrl);
+          const bookmarks = (data?.results || [])
+            .filter(item => item.tag_names?.includes(tagName))
+            .map(item => this.createBookmark(item));
+          
+          allBookmarks.push(...bookmarks);
+          
+          // Check if there's a next page
+          nextUrl = data?.next ? new URL(data.next).pathname + new URL(data.next).search : null;
+        }
+        
+        return allBookmarks;
+      } catch (error) {
+        console.error(`Failed to fetch bookmarks for tag ${tag}:`, error);
+        return [];
+      }
+    },
+    
+    async loadAllBookmarks() {
+      try {
+        // Fetch all bookmarks with the 'startpage' tag
+        const allBookmarks = await this.fetchBookmarksByTag('#startpage');
+        
+        // Organize by JSON data (section property determines top/bottom)
+        const top = [];
+        const bottom = [];
+        
+        allBookmarks.forEach(bookmark => {
+          const jsonData = this.parseBookmarkNotes(bookmark.notes);
+          
+          if (jsonData?.section === 'top') {
+            top.push(bookmark);
+          } else if (jsonData?.section === 'bottom') {
+            bottom.push(bookmark);
+          } else {
+            // Default fallback: put in bottom section if no JSON data
+            bottom.push(bookmark);
+          }
+        });
+        
+        this.store.sections.top.items = top;
+        this.store.sections.bottom.items = bottom;
+        this.store.sections.top.status = 'success';
+        this.store.sections.bottom.status = 'success';
+      } catch (error) {
+        console.error('Failed to load bookmarks:', error);
+        this.store.sections.top.status = 'error';
+        this.store.sections.bottom.status = 'error';
+      }
+    },
+    
+    preloadIcons(bookmarks, limit = 8) {
+      const loadIcon = (url) => {
+        const img = new Image();
+        img.src = url;
+      };
+      
+      // Load first batch immediately
+      bookmarks.slice(0, limit).forEach(b => loadIcon(b.icon));
+      
+      // Load rest when idle
+      const remaining = bookmarks.slice(limit);
+      if (remaining.length) {
+        const loadRemaining = () => remaining.forEach(b => loadIcon(b.icon));
+        
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(loadRemaining);
+        } else {
+          setTimeout(loadRemaining, 150);
+        }
+      }
+    },
+    
+    updateLocalCache(bookmarkId, updatedData) {
+      ['top', 'bottom'].forEach(section => {
+        const items = this.store.sections[section].items;
+        const index = items.findIndex(b => b.id === bookmarkId);
+        
+        if (index !== -1) {
+          const updated = this.createBookmark(updatedData);
+          items.splice(index, 1, updated);
+        }
+      });
+      
+      // Update search results if present
+      const searchIndex = this.store.search.results.findIndex(b => b.id === bookmarkId);
+      if (searchIndex !== -1) {
+        const updated = this.createBookmark(updatedData);
+        this.store.search.results.splice(searchIndex, 1, updated);
+      }
+      
+      // Clear icon cache
+      this.iconCache.forEach((value, key) => {
+        if (key.includes(bookmarkId) || key.includes(updatedData.url)) {
+          this.iconCache.delete(key);
+        }
+      });
+    },
+    
+    // DRAG AND DROP METHODS
+    onMouseDown(event, item, type, from) {
+      this.dragState = {
+        ...this.dragState,
+        startX: event.clientX,
+        startY: event.clientY,
+        draggedItem: item,
+        draggedType: type,
+        draggedFrom: from
+      };
+      
+      document.addEventListener('mousemove', this.onMouseMove);
+      document.addEventListener('mouseup', this.onMouseUp);
+    },
+    
+    onMouseMove(event) {
+      if (!this.dragState.draggedItem) return;
+      
+      const deltaX = Math.abs(event.clientX - this.dragState.startX);
+      const deltaY = Math.abs(event.clientY - this.dragState.startY);
+      
+      if (!this.dragState.isDragging && (deltaX > 5 || deltaY > 5)) {
+        this.startDrag(event);
+      }
+      
+      if (this.dragState.isDragging) {
+        this.updateDragPreview(event.clientX, event.clientY);
+      }
+    },
+    
+    onMouseUp(event) {
+      if (this.dragState.isDragging) {
+        this.handleDrop(event);
+      } else if (this.dragState.draggedType === 'bookmark') {
+        // Just a click - navigate
+        window.location.href = this.dragState.draggedItem.link;
+      }
+      
+      this.cleanupDrag();
+    },
+    
+    startDrag(event) {
+      this.dragState.isDragging = true;
+      this.createDragPreview(event.clientX, event.clientY);
+      document.body.style.cursor = 'grabbing';
+      document.body.style.userSelect = 'none';
+    },
+    
+    createDragPreview(x, y) {
+      const preview = document.createElement('div');
+      preview.className = 'drag-preview';
+      const item = this.dragState.draggedItem;
+      
+      preview.innerHTML = `
+        <div class="drag-preview-content">
+          <img src="${item.icon}" alt="${item.name}" class="drag-preview-icon">
+          <span class="drag-preview-text">${item.name}</span>
+        </div>
+      `;
+      
+      preview.style.left = (x + 10) + 'px';
+      preview.style.top = (y + 10) + 'px';
+      document.body.appendChild(preview);
+      this.dragState.preview = preview;
+    },
+    
+    updateDragPreview(x, y) {
+      if (this.dragState.preview) {
+        this.dragState.preview.style.left = (x + 10) + 'px';
+        this.dragState.preview.style.top = (y + 10) + 'px';
+      }
+    },
+    
+    handleDrop(event) {
+      if (this.dragState.preview) this.dragState.preview.style.display = 'none';
+      const target = document.elementFromPoint(event.clientX, event.clientY);
+      if (this.dragState.preview) this.dragState.preview.style.display = 'block';
+      
+      if (this.dragState.draggedType === 'bookmark') {
+        this.handleBookmarkDrop(target);
+      }
+    },
+    
+    handleBookmarkDrop(target) {
+      const actionElement = target.closest('[data-action]');
+      const groupElement = target.closest('[data-group]');
+      
+      if (actionElement?.dataset.action === '__UPDATE_ICON__') {
+        this.updateBookmarkIcon();
+        return;
+      }
+      
+      if (groupElement) {
+        const targetGroup = groupElement.dataset.group;
+        
+        if (targetGroup === '__NEW_GROUP__') {
+          this.createNewGroup();
+        } else {
+          this.moveBookmarkToGroup(targetGroup);
+        }
+      }
+    },
+    
+    async moveBookmarkToGroup(targetGroup) {
+      const bookmark = this.dragState.draggedItem;
+      const fromGroup = this.dragState.draggedFrom;
+      
+      if (fromGroup === targetGroup) return;
+      
+      // Determine sections based on target group
+      const fromSection = fromGroup === 'startpage-top' ? 'top' : 'bottom';
+      const toSection = targetGroup === 'startpage-top' ? 'top' : 'bottom';
+      
+      // Update local state (keep original bookmark data)
+      const updatedBookmark = { ...bookmark };
+      
+      // Remove from source
+      const fromItems = this.store.sections[fromSection].items;
+      const fromIndex = fromItems.findIndex(b => b.id === bookmark.id);
+      if (fromIndex !== -1) fromItems.splice(fromIndex, 1);
+      
+      // Add to target
+      this.store.sections[toSection].items.push(updatedBookmark);
+      
+      // Update API with JSON notes (this is now the primary way to track sections/groups)
+      await this.updateBookmarkNotes(updatedBookmark, toSection, targetGroup);
+      this.$forceUpdate();
+    },
+    
+    async createNewGroup() {
+      const bookmark = this.dragState.draggedItem;
+      if (!bookmark) return;
+      
+      const groupName = prompt('Enter new group name:', '');
+      if (!groupName?.trim()) return;
+      
+      const cleanGroupName = groupName.trim().toLowerCase().replace(/\s+/g, '-');
+      
+      // Check if group exists
+      const existingGroups = Object.keys(this.groupedBottomBookmarks);
+      if (existingGroups.includes(cleanGroupName)) {
+        alert(`Group "${cleanGroupName}" already exists. Moving bookmark to existing group.`);
+      }
+      
+      await this.moveBookmarkToGroup(cleanGroupName);
+      this.$nextTick(() => this.$forceUpdate());
+    },
+    
+    async updateBookmarkIcon() {
+      const bookmark = this.dragState.draggedItem;
+      if (!bookmark) return;
+      
+      const iconUrl = prompt('Enter icon URL:', '');
+      if (!iconUrl?.trim()) return;
+      
+      const cleanIconUrl = iconUrl.trim();
+      
+      // Validate URL
+      try {
+        new URL(cleanIconUrl);
+      } catch {
+        alert('Please enter a valid URL (must start with http:// or https://)');
+        return;
+      }
+      
+      // Get current data
+      const currentData = this.parseBookmarkNotes(bookmark.notes) || {};
+      const section = currentData.section || 'bottom'; // Default to bottom if no section specified
+      const group = currentData.group || 'default';
+      
+      // Update with new icon
+      const result = await this.updateBookmarkNotes(bookmark, section, group, cleanIconUrl);
+      if (result) {
+        console.log(`Updated icon for ${bookmark.name}`);
+        this.$forceUpdate();
+      } else {
+        alert('Failed to update icon. Please try again.');
+      }
+    },
+    
+    cleanupDrag() {
+      if (this.dragState.preview) {
+        document.body.removeChild(this.dragState.preview);
+      }
+      
+      document.removeEventListener('mousemove', this.onMouseMove);
+      document.removeEventListener('mouseup', this.onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      
+      this.dragState = {
+        isDragging: false,
+        draggedItem: null,
+        draggedType: null,
+        draggedFrom: null,
+        startX: 0,
+        startY: 0,
+        preview: null
+      };
+    },
+    
+    // KEYBOARD NAVIGATION
+    handleKeydown(event) {
+      const bookmarks = this.searchResults;
+      
+      const actions = {
+        ArrowDown: () => {
+          if (bookmarks.length) {
+            this.selectedIndex = (this.selectedIndex + 1) % bookmarks.length;
+          }
+        },
+        ArrowUp: () => {
+          if (bookmarks.length) {
+            this.selectedIndex = (this.selectedIndex - 1 + bookmarks.length) % bookmarks.length;
+          }
+        },
+        Enter: () => {
+          const target = bookmarks[this.selectedIndex] || bookmarks[0];
+          if (target && (bookmarks.length === 1 || this.selectedIndex >= 0)) {
+            window.location.href = target.link;
+          }
+        },
+        Escape: () => {
+          this.store.search.query = '';
+          this.selectedIndex = -1;
+          this.$nextTick(() => this.$refs.searchInput?.focus());
+        }
+      };
+      
+      if (actions[event.key]) {
+        actions[event.key]();
+      }
+    },
+    
+    // UTILITY METHODS
+  },
+  
+  watch: {
+    'store.search.query'(newQuery) {
+      this.selectedIndex = -1;
+      clearTimeout(this.timers.search);
+      this.timers.search = setTimeout(() => this.searchBookmarks(newQuery), 200);
+    }
+  },
+  
+  async mounted() {
+    window.addEventListener('keydown', this.handleKeydown);
+    this.$nextTick(() => this.$refs.searchInput?.focus());
+    
+    await this.loadAllBookmarks();
+  },
+  
+  beforeUnmount() {
+    window.removeEventListener('keydown', this.handleKeydown);
+    clearTimeout(this.timers.search);
+    if (this.controllers.search) this.controllers.search.abort();
+    if (this.dragState.isDragging) this.cleanupDrag();
+  }
+}).mount('#app');
