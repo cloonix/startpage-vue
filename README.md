@@ -1,147 +1,77 @@
 # Vue Startpage
 
-A fast, lightweight self-hosted startpage that integrates with [Linkding](https://github.com/sissbruecker/linkding) for bookmark management. Built with Vue.js and served via nginx for optimal performance.
+A lightweight self-hosted startpage that connects to **Linkding** for bookmark management. Built with Vue.js 3 and nginx for fast, responsive bookmark browsing.
 
-## 🥸 Disclaimer
+> **Linkding is the backbone** - This app requires a [Linkding](https://github.com/sissbruecker/linkding) instance to function.
 
-One of my colleagues originally came up with the idea for this start page. We are currently working closely with AI tools, as well as developing them. The idea was to use different LLMs to develop this project. Vibe coding. It took me a few weeks, though, to get it to where it is now. I mainly used Claude 4 and Gemini Pro. I realized that experience with the components used was necessary. AI was only a booster, not a replacement.
+![screenshot](screenshot.png)
 
 ## ✨ Features
 
-- 🔖 **Linkding Integration** - Search and browse your bookmarks with real-time filtering
-- 🏷️ **Tag-Based Sections** - Organize bookmarks into visual sections using tags
-- ⌨️ **Keyboard Navigation** - Full keyboard support for efficient browsing
-- 🖼️ **Custom Icons** - Add custom icons to bookmarks via notes field
-- 📱 **Responsive Design** - Works seamlessly on desktop and mobile
-- 🔒 **Secure Proxy** - Server-side API calls protect your credentials
-- ⚡ **Performance Optimized** - Aggressive caching and gzip compression
-- 🐳 **Docker Ready** - Single command deployment
+- 🔖 **Real-time bookmark search** with debounced filtering
+- 🏷️ **Tag-based sections** for organized layouts
+- ⌨️ **Full keyboard navigation** (arrows, enter, escape)
+- 🖼️ **Custom icons** via bookmark notes
+- 📱 **Responsive design** across all devices
+- 🐳 **Docker deployment** with single command
 
-## 🖼️ Screenshot
-
-![screenshot](https://github.com/user-attachments/assets/171cef32-3e98-4155-93dc-303e84c070da)
-
-## 🐳 Docker Ready - Single command deployment
+## 🚀 Quick Start
 
 ### Prerequisites
-- Docker and Docker Compose installed
-- A running [Linkding](https://github.com/sissbruecker/linkding) instance
-- Linkding API token (from your Linkding settings)
+- Docker & Docker Compose
+- Running [Linkding](https://github.com/sissbruecker/linkding) instance
+- Linkding API token
 
-### 1. Clone Repository
+### Deploy
 ```bash
 git clone https://github.com/cloonix/startpage-vue.git
 cd startpage-vue
-```
-
-### 2. Configure Environment
-```bash
 cp .env.example .env
-# Edit .env with your settings
-```
-
-### 3. Deploy
-```bash
+# Edit .env with your Linkding URL and API token
 ./build.sh
 ```
 
-That's it! Your startpage will be available at `http://localhost:3000`
+Access at `http://localhost:3000`
 
-## 📋 Environment Variables
+## ⚙️ Configuration
 
-Required in your `.env` file:
-
+Create `.env` file:
 ```bash
-# Server Configuration
-PORT=3000                                    # Port for the web interface
-
-# Linkding Configuration (Required)
-LINKDING_BASE_URL=https://your-linkding.com # Your Linkding instance URL
-LINKDING_API_TOKEN=your_api_token_here       # API token from Linkding settings
-
-# Optional: Cloudflare Access (if using CF protection)
-CF_ACCESS_CLIENT_ID=your_client_id
-CF_ACCESS_CLIENT_SECRET=your_client_secret
+PORT=3000
+LINKDING_BASE_URL=https://your-linkding.com
+LINKDING_API_TOKEN=your_api_token_here
 ```
 
-### Getting Your Linkding API Token
-1. Go to your Linkding instance
-2. Navigate to **Settings** → **Integrations**
-3. Generate or copy your **REST API Token**
-4. Add it to your `.env` file
+Get your API token: Linkding → Settings → Integrations → REST API Token
 
-## 🎯 Usage
+## 📋 Usage
 
-### Setting Up Static Bookmark Sections
+### Organize Bookmarks
+- Tag bookmarks with `#startpage` + optional category tags
+- Bookmarks are automatically organized by categories
 
-Create organized bookmark sections by tagging your bookmarks in Linkding:
+### Custom Icons
+Add to bookmark notes: `icon::https://example.com/favicon.png`
 
-**Top Section (Horizontal Grid):**
-- Tag bookmarks with `#startpage-top`
-- Perfect for frequently used services
-- Displays in a clean grid layout
-
-**Bottom Section (Grouped by Category):**
-- Tag bookmarks with `#startpage-bottom` + category tag
-- Example: `#startpage-bottom #media #tools #development`
-- Groups bookmarks by their additional tags
-
-### Adding Custom Icons
-
-Make your bookmarks visually appealing:
-
-1. Edit a bookmark in Linkding
-2. In the **Notes** field, add:
-   ```
-   icon::https://example.com/favicon.png
-   ```
-3. Use any image URL (PNG, JPG, SVG)
-4. Icons display at 24x24px
-
-### Keyboard Navigation
-
-- **Type** to search bookmarks instantly
-- **↑/↓ Arrow Keys** - Navigate search results
-- **Enter** - Open selected bookmark
-- **Esc** - Clear search and return to homepage
+### Navigation
+- Type to search • ↑↓ to navigate • Enter to open • Esc to clear
 
 ## 🐳 Docker Commands
 
 ```bash
-# Start/stop with docker-compose
-docker compose up -d
-docker compose down
-
-# View logs
-docker compose logs -f startpage-vue
-
-# Rebuild after changes
-docker compose up --build --force-recreate -d
-
-# Access container shell for debugging
-docker compose exec startpage-vue sh
+docker compose up -d        # Start
+docker compose down         # Stop
+docker compose logs -f      # View logs
+./build.sh                  # Rebuild
 ```
 
-## 🔧 Technical Architecture
+## 🔧 Architecture
 
-- **Frontend**: Pure Vue.js 3 (no build process required)
-- **Server**: nginx with optimized caching and gzip compression
-- **Proxy**: Server-side API calls to Linkding (credentials never exposed to browser)
-- **Caching**: Aggressive static file caching with content-based cache busting
-- **Security**: CORS headers, security headers, IPv6 disabled for compatibility
-
-## 🚀 Performance Features
-
-- **Content-based Cache Busting**: Uses MD5 hash of app.js for efficient browser caching
-- **Optimized nginx Configuration**: 7-day static file caching, 2-minute API response caching
-- **Gzip Compression**: Reduces transfer size for better loading speeds
-- **Debounced Search**: 200ms debounce prevents excessive API calls
-- **Efficient Vue Rendering**: Unique keys for optimal list rendering performance
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+- **Frontend**: Vue.js 3 (no build step)
+- **Server**: nginx with caching
+- **Backend**: Linkding API proxy
+- **Deployment**: Docker container
 
 ## 📝 License
 
-MIT - see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) file.
