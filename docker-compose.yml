@@ -4,6 +4,8 @@ services:
       context: .
       args:
         APP_HASH: ${APP_HASH}
+        CSS_HASH: ${CSS_HASH:-unknown}
+        VERSION: ${VERSION:-dev}
     container_name: startpage-vue
     ports:
       - "${PORT:-3000}:80"
@@ -20,4 +22,5 @@ services:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 5s
-      retries: 2
+      retries: 3
+      start_period: 10s

@@ -97,9 +97,7 @@ createApp({
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeout);
       
-      if (signal) {
-        signal.addEventListener('abort', () => controller.abort(), { once: true });
-      }
+      signal?.addEventListener('abort', () => controller.abort(), { once: true });
       
       const attempt = async (retryCount = 0) => {
         try {
@@ -167,14 +165,12 @@ createApp({
       
       try {
         const cleanNotes = notes.replace(/icon::[^\s]+\s*/, '').trim();
-        if (cleanNotes.startsWith('{') && cleanNotes.endsWith('}')) {
-          return JSON.parse(cleanNotes);
-        }
+        return cleanNotes.startsWith('{') && cleanNotes.endsWith('}') 
+          ? JSON.parse(cleanNotes) 
+          : null;
       } catch {
-        // Invalid JSON, return null
+        return null;
       }
-      
-      return null;
     },
     
     createBookmarkNotes(section, group, iconUrl) {
@@ -235,7 +231,7 @@ createApp({
     validateIconUrl(iconUrl, baseUrl) {
       try {
         const url = new URL(iconUrl, baseUrl);
-        return (url.protocol === 'http:' || url.protocol === 'https:') ? url.toString() : '';
+        return ['http:', 'https:'].includes(url.protocol) ? url.toString() : '';
       } catch {
         return '';
       }
@@ -243,8 +239,7 @@ createApp({
     
     getFaviconUrl(url) {
       try {
-        const host = new URL(url).hostname;
-        return `https://www.google.com/s2/favicons?domain=${host}&sz=32`;
+        return `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=32`;
       } catch {
         return null;
       }
@@ -329,9 +324,7 @@ createApp({
         return;
       }
       
-      if (this.controllers.search) {
-        this.controllers.search.abort();
-      }
+      this.controllers.search?.abort();
       
       const controller = new AbortController();
       this.controllers.search = controller;
@@ -440,11 +433,9 @@ createApp({
       if (remaining.length) {
         const loadRemaining = () => remaining.forEach(b => loadIcon(b.icon));
         
-        if ('requestIdleCallback' in window) {
-          requestIdleCallback(loadRemaining);
-        } else {
-          setTimeout(loadRemaining, 150);
-        }
+        'requestIdleCallback' in window 
+          ? requestIdleCallback(loadRemaining)
+          : setTimeout(loadRemaining, 150);
       }
     },
     
