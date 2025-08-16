@@ -8,7 +8,6 @@ services:
         APP_HASH: ${APP_HASH:-$(date +%s)}
         CSS_HASH: ${CSS_HASH:-unknown}
         VERSION: ${VERSION:-prod-$(date +%Y%m%d)}
-      no_cache: true  # Force rebuild to get latest changes
     ports:
       - "81:80"  # Changed from 81:81 to 81:80 (container uses port 80)
     env_file:
