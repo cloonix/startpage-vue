@@ -467,6 +467,9 @@ createApp({
     
     // DRAG AND DROP METHODS
     onMouseDown(event, item, type, from) {
+      // Prevent default link behavior for draggable links
+      event.preventDefault();
+      
       this.dragState = {
         ...this.dragState,
         startX: event.clientX,
@@ -693,6 +696,23 @@ createApp({
           this.$nextTick(() => this.$refs.searchInput?.focus());
         }
       };
+      
+      // Handle Ctrl+J (down) and Ctrl+K (up) shortcuts
+      if (event.ctrlKey && event.key === 'j') {
+        event.preventDefault();
+        if (bookmarks.length) {
+          this.selectedIndex = (this.selectedIndex + 1) % bookmarks.length;
+        }
+        return;
+      }
+      
+      if (event.ctrlKey && event.key === 'k') {
+        event.preventDefault();
+        if (bookmarks.length) {
+          this.selectedIndex = (this.selectedIndex - 1 + bookmarks.length) % bookmarks.length;
+        }
+        return;
+      }
       
       if (actions[event.key]) {
         actions[event.key]();

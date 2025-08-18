@@ -14,7 +14,7 @@
     <div id="app" class="w-full max-w-6xl">
         <!-- Header -->
         <header class="mb-4 text-center">
-            <p class="header-text">Use ↑↓← → to navigate • Enter to open • Esc to reset</p>
+            <p class="header-text">Use ↑↓ or Ctrl+j/k to navigate • Enter to open • Esc to reset</p>
         </header>
         
         <!-- Search -->
@@ -48,16 +48,17 @@
                         <div v-for="n in 7" :key="'skeleton-top-' + n" class="skeleton bookmark-item"></div>
                     </template>
                     <template v-else>
-                        <div v-for="bookmark in sortedTopBookmarks" :key="bookmark.id" 
-                             class="bookmark-item bookmark-link draggable"
-                             :class="{ 'dragging': dragState.draggedItem?.id === bookmark.id }"
-                             :data-bookmark-id="bookmark.id" 
-                             :data-group="'startpage-top'"
-                             @mousedown="onMouseDown($event, bookmark, 'bookmark', 'startpage-top')">
+                        <a v-for="bookmark in sortedTopBookmarks" :key="bookmark.id" 
+                           :href="bookmark.link"
+                           class="bookmark-item bookmark-link draggable"
+                           :class="{ 'dragging': dragState.draggedItem?.id === bookmark.id }"
+                           :data-bookmark-id="bookmark.id" 
+                           :data-group="'startpage-top'"
+                           @mousedown="onMouseDown($event, bookmark, 'bookmark', 'startpage-top')">
                             <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon" loading="lazy" 
                                  @error="handleImageError($event, bookmark)">
                             <span class="bookmark-text">{{ bookmark.name }}</span>
-                        </div>
+                        </a>
                         <!-- Drop zone for top section -->
                         <div v-if="dragState.isDragging" 
                              class="bookmark-item drop-zone"
@@ -119,16 +120,17 @@
                             <h3 class="section-title text-center column-header">
                                 {{ tag }}
                             </h3>
-                            <div v-for="bookmark in bookmarks" :key="bookmark.id" 
-                                 class="bookmark-item bookmark-link draggable"
-                                 :class="{ 'dragging': dragState.draggedItem?.id === bookmark.id }"
-                                 :data-bookmark-id="bookmark.id" 
-                                 :data-group="tag"
-                                 @mousedown="onMouseDown($event, bookmark, 'bookmark', tag)">
+                            <a v-for="bookmark in bookmarks" :key="bookmark.id" 
+                               :href="bookmark.link"
+                               class="bookmark-item bookmark-link draggable"
+                               :class="{ 'dragging': dragState.draggedItem?.id === bookmark.id }"
+                               :data-bookmark-id="bookmark.id" 
+                               :data-group="tag"
+                               @mousedown="onMouseDown($event, bookmark, 'bookmark', tag)">
                                 <img :src="bookmark.icon" :alt="bookmark.name" class="bookmark-icon" loading="lazy" 
                                      @error="handleImageError($event, bookmark)">
                                 <span class="bookmark-text">{{ bookmark.name }}</span>
-                            </div>
+                            </a>
                             <!-- Drop zone for each group -->
                             <div v-if="dragState.isDragging" 
                                  class="bookmark-item drop-zone"

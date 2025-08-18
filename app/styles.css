@@ -79,6 +79,8 @@ body {
     align-items: center;
     justify-content: center;
     padding: 0 8px;
+    text-decoration: none;
+    color: inherit;
 }
 
 @media (min-width: 640px) {
