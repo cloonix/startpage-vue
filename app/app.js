@@ -467,7 +467,13 @@ createApp({
     
     // DRAG AND DROP METHODS
     onMouseDown(event, item, type, from) {
-      // Prevent default link behavior for draggable links
+      // Only handle left-clicks for drag operations
+      // Let middle-clicks and right-clicks use native browser behavior
+      if (event.button !== 0) {
+        return;
+      }
+      
+      // Prevent default link behavior for draggable links (left-click only)
       event.preventDefault();
       
       this.dragState = {
