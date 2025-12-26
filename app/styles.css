@@ -63,29 +63,32 @@ body {
 }
 
 /* === INTERACTIVE ELEMENTS === */
-.bookmark-item {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-subtle);
-    border-radius: 6px;
-    transition: all 0.15s ease;
-    height: 32px;
-}
-
-.bookmark-item:hover, 
-.search-result-item:hover, 
-.search-result-item.selected {
-    background: var(--bg-hover);
-    border-color: var(--accent);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
+.bookmark-item,
 .search-result-item {
     background: var(--bg-secondary);
     border: 1px solid var(--border-subtle);
     border-radius: 6px;
     transition: all 0.15s ease;
+}
+
+.bookmark-item {
+    height: 32px;
+}
+
+.search-result-item {
     height: auto;
+}
+
+/* Only apply hover effects on devices that support hover */
+@media (hover: hover) {
+    .bookmark-item:hover, 
+    .search-result-item:hover, 
+    .search-result-item.selected {
+        background: var(--bg-hover);
+        border-color: var(--accent);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
 }
 
 /* === BOOKMARKS === */
@@ -247,13 +250,16 @@ body {
     user-select: none;
 }
 
-.draggable:hover {
-    cursor: grab;
-}
-
 .draggable.dragging {
     opacity: 0.5;
     transform: scale(0.95);
+}
+
+/* Hover cursor for draggable items on hover-capable devices */
+@media (hover: hover) {
+    .draggable:hover {
+        cursor: grab;
+    }
 }
 
 .drag-preview {
@@ -303,10 +309,12 @@ body {
     cursor: default;
 }
 
-.drop-zone:hover {
-    border-color: var(--accent);
-    background: rgba(59, 130, 246, 0.1);
-    opacity: 1;
+@media (hover: hover) {
+    .drop-zone:hover {
+        border-color: var(--accent);
+        background: rgba(59, 130, 246, 0.1);
+        opacity: 1;
+    }
 }
 
 .drop-zone-content {
@@ -359,10 +367,12 @@ body {
     height: 44px;
 }
 
-.drop-zone-area:hover {
-    border-color: var(--accent);
-    background: rgba(59, 130, 246, 0.1);
-    transform: translateY(-1px);
+@media (hover: hover) {
+    .drop-zone-area:hover {
+        border-color: var(--accent);
+        background: rgba(59, 130, 246, 0.1);
+        transform: translateY(-1px);
+    }
 }
 
 .drop-zone-icon-wrapper {
