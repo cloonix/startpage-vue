@@ -1,24 +1,14 @@
+# DEPRECATED: This file is kept for backwards compatibility
+# Use docker-compose.yml with --profile prod instead:
+#   docker compose --profile prod up -d
+#
+# Or use the build-prod.sh script which handles this automatically
+
 services:
   startpage:
+    extends:
+      file: docker-compose.yml
+      service: startpage-prod
     container_name: startpage
-    build:
-      context: /home/claus/git/startpage-vue
-      dockerfile: Dockerfile
-      args:
-        APP_HASH: ${APP_HASH:-$(date +%s)}
-        CSS_HASH: ${CSS_HASH:-unknown}
-        VERSION: ${VERSION:-prod-$(date +%Y%m%d)}
     ports:
-      - "81:80"  # Changed from 81:81 to 81:80 (container uses port 80)
-    env_file:
-      - ../.env_startpage
-    environment:
-      - PORT=80
-      - NODE_ENV=production
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      - "81:80"
