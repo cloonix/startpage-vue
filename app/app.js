@@ -3,6 +3,25 @@ const { createApp } = Vue;
 createApp({
   data() {
     return {
+      // Constants
+      CONSTANTS: {
+        SEARCH_MIN_LENGTH: 2,
+        SEARCH_DEBOUNCE_MS: 200,
+        API_TIMEOUT_MS: 10000,
+        API_RETRY_COUNT: 1,
+        ICON_PRELOAD_LIMIT: 8,
+        ICON_PRELOAD_DELAY_MS: 150,
+        ICON_CACHE_MAX_SIZE: 500,
+        DRAG_THRESHOLD_PX: 5,
+        BOOKMARK_LIMIT_PER_PAGE: 100,
+        RETRY_MAX_ATTEMPTS: 3,
+        RETRY_BASE_DELAY_MS: 1000,
+        ERROR_TOAST_DURATION_MS: 5000,
+        SUCCESS_TOAST_DURATION_MS: 3000,
+        LOADING_TOAST_DURATION_MS: 0,
+        API_CACHE_DURATION_MIN: 2
+      },
+      
       // Core application state
       store: {
         sections: {
@@ -20,7 +39,6 @@ createApp({
       
       // Caching and performance
       iconCache: new Map(),
-      iconCacheMaxSize: 500,
       sortedCache: {
         top: null,
         bottom: null,
@@ -119,7 +137,7 @@ createApp({
   
   methods: {
     // ERROR FEEDBACK METHODS
-    showError(message, duration = 5000) {
+    showError(message, duration = this.CONSTANTS.ERROR_TOAST_DURATION_MS) {
       clearTimeout(this.store.ui.errorTimeout);
       this.store.ui.errorMessage = message;
       if (duration > 0) {
@@ -136,7 +154,7 @@ createApp({
     
     // API METHODS
     async apiCall(path, options = {}) {
-      const { signal, params, timeout = 10000, retry = 1 } = options;
+      const { signal, params, timeout = this.CONSTANTS.API_TIMEOUT_MS, retry = this.CONSTANTS.API_RETRY_COUNT } = options;
       const url = new URL(path, window.location.origin);
       
       if (params) {
@@ -171,7 +189,7 @@ createApp({
           
           // Retry on network errors
           if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300));
+            await new Promise(resolve => setTimeout(resolve, this.CONSTANTS.SEARCH_DEBOUNCE_MS + Math.random() * 300));
             return attempt(retryCount + 1);
           }
           
@@ -188,7 +206,7 @@ createApp({
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data),
-          signal: AbortSignal.timeout(10000)
+          signal: AbortSignal.timeout(this.CONSTANTS.API_TIMEOUT_MS)
         });
         
         if (!response.ok) {
@@ -286,7 +304,7 @@ createApp({
       }
       
       // Evict oldest entry if cache is full
-      if (this.iconCache.size >= this.iconCacheMaxSize) {
+      if (this.iconCache.size >= this.CONSTANTS.ICON_CACHE_MAX_SIZE) {
         const firstKey = this.iconCache.keys().next().value;
         this.iconCache.delete(firstKey);
       }
@@ -404,7 +422,7 @@ createApp({
     async searchBookmarks(query) {
       const normalizedQuery = query.trim().toLowerCase();
       
-      if (normalizedQuery.length < 2) {
+      if (normalizedQuery.length < this.CONSTANTS.SEARCH_MIN_LENGTH) {
         this.store.search = { query: '', results: [], status: 'idle', error: '' };
         return;
       }
@@ -422,7 +440,7 @@ createApp({
       
       try {
         const data = await this.apiCall('/api/bookmarks/', {
-          params: { limit: '100', q: normalizedQuery },
+          params: { limit: String(this.CONSTANTS.BOOKMARK_LIMIT_PER_PAGE), q: normalizedQuery },
           signal: controller.signal
         });
         
@@ -483,7 +501,7 @@ createApp({
     },
     
     async loadAllBookmarks() {
-      const maxRetries = 3;
+      const maxRetries = this.CONSTANTS.RETRY_MAX_ATTEMPTS;
       let attempt = 0;
       
       while (attempt < maxRetries) {
@@ -523,16 +541,16 @@ createApp({
             this.store.sections.bottom.status = 'error';
             this.store.sections.top.error = 'Failed to load bookmarks. Please refresh the page.';
             this.store.sections.bottom.error = error.message;
-            this.showError('Failed to load bookmarks after 3 attempts. Please check your connection and refresh.', 10000);
+            this.showError(`Failed to load bookmarks after ${maxRetries} attempts. Please check your connection and refresh.`, this.CONSTANTS.ERROR_TOAST_DURATION_MS * 2);
           } else {
             // Wait before retry with exponential backoff
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            await new Promise(resolve => setTimeout(resolve, this.CONSTANTS.RETRY_BASE_DELAY_MS * attempt));
           }
         }
       }
     },
     
-    preloadIcons(bookmarks, limit = 8) {
+    preloadIcons(bookmarks, limit = this.CONSTANTS.ICON_PRELOAD_LIMIT) {
       const loadIcon = (url) => {
         const img = new Image();
         img.src = url;
@@ -548,7 +566,7 @@ createApp({
         
         'requestIdleCallback' in window 
           ? requestIdleCallback(loadRemaining)
-          : setTimeout(loadRemaining, 150);
+          : setTimeout(loadRemaining, this.CONSTANTS.ICON_PRELOAD_DELAY_MS);
       }
     },
     
@@ -618,7 +636,7 @@ createApp({
       const deltaX = Math.abs(event.clientX - this.dragState.startX);
       const deltaY = Math.abs(event.clientY - this.dragState.startY);
       
-      if (!this.dragState.isDragging && (deltaX > 5 || deltaY > 5)) {
+      if (!this.dragState.isDragging && (deltaX > this.CONSTANTS.DRAG_THRESHOLD_PX || deltaY > this.CONSTANTS.DRAG_THRESHOLD_PX)) {
         this.startDrag(event);
       }
       
@@ -770,16 +788,16 @@ createApp({
       try {
         const parsed = new URL(cleanIconUrl);
         if (!['http:', 'https:'].includes(parsed.protocol)) {
-          this.showError('Please enter a valid URL (must start with http:// or https://)', 5000);
+          this.showError('Please enter a valid URL (must start with http:// or https://)', this.CONSTANTS.ERROR_TOAST_DURATION_MS);
           return;
         }
       } catch {
-        this.showError('Please enter a valid URL (must start with http:// or https://)', 5000);
+        this.showError('Please enter a valid URL (must start with http:// or https://)', this.CONSTANTS.ERROR_TOAST_DURATION_MS);
         return;
       }
       
       // Show loading state
-      this.showError('Updating icon...', 0);
+      this.showError('Updating icon...', this.CONSTANTS.LOADING_TOAST_DURATION_MS);
       
       try {
         // Get current data
@@ -792,13 +810,13 @@ createApp({
         
         if (result) {
           this.hideError();
-          this.showError(`✓ Icon updated for ${bookmark.name}`, 3000);
+          this.showError(`✓ Icon updated for ${bookmark.name}`, this.CONSTANTS.SUCCESS_TOAST_DURATION_MS);
           this.$forceUpdate();
         } else {
-          this.showError('Failed to update icon. Please try again.', 5000);
+          this.showError('Failed to update icon. Please try again.', this.CONSTANTS.ERROR_TOAST_DURATION_MS);
         }
       } catch (error) {
-        this.showError(`Error: ${error.message}`, 5000);
+        this.showError(`Error: ${error.message}`, this.CONSTANTS.ERROR_TOAST_DURATION_MS);
       }
     },
     
@@ -886,7 +904,7 @@ createApp({
     'store.search.query'(newQuery) {
       this.selectedIndex = -1;
       clearTimeout(this.timers.search);
-      this.timers.search = setTimeout(() => this.searchBookmarks(newQuery), 200);
+      this.timers.search = setTimeout(() => this.searchBookmarks(newQuery), this.CONSTANTS.SEARCH_DEBOUNCE_MS);
     }
   },
   
