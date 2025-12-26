@@ -298,21 +298,30 @@ createApp({
       }
     },
     
+    escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    },
+    
     highlightText(text, query) {
       if (!query?.trim() || !text) return text;
+      
+      // Escape HTML first to prevent XSS
+      const escaped = this.escapeHtml(text);
       
       try {
         return query.split(' ')
           .filter(Boolean)
           .reduce((result, word) => {
-            const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             return result.replace(
-              new RegExp(`(${escaped})`, 'gi'),
+              new RegExp(`(${escapedWord})`, 'gi'),
               '<mark class="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">$1</mark>'
             );
-          }, text);
+          }, escaped);
       } catch {
-        return text;
+        return escaped;
       }
     },
     
