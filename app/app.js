@@ -304,6 +304,15 @@ createApp({
       return div.innerHTML;
     },
     
+    isSafeUrl(url) {
+      try {
+        const parsed = new URL(url);
+        return ['http:', 'https:'].includes(parsed.protocol);
+      } catch {
+        return false;
+      }
+    },
+    
     highlightText(text, query) {
       if (!query?.trim() || !text) return text;
       
@@ -518,7 +527,12 @@ createApp({
         this.handleDrop(event);
       } else if (this.dragState.draggedType === 'bookmark') {
         // Just a click - navigate
-        window.location.href = this.dragState.draggedItem.link;
+        const link = this.dragState.draggedItem.link;
+        if (this.isSafeUrl(link)) {
+          window.location.href = link;
+        } else {
+          console.error('Unsafe URL blocked:', link);
+        }
       }
       
       this.cleanupDrag();
@@ -702,7 +716,11 @@ createApp({
         Enter: () => {
           const target = bookmarks[this.selectedIndex] || bookmarks[0];
           if (target && (bookmarks.length === 1 || this.selectedIndex >= 0)) {
-            window.location.href = target.link;
+            if (this.isSafeUrl(target.link)) {
+              window.location.href = target.link;
+            } else {
+              console.error('Unsafe URL blocked:', target.link);
+            }
           }
         },
         Escape: () => {
