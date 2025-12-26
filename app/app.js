@@ -505,29 +505,35 @@ createApp({
     },
     
     updateLocalCache(bookmarkId, updatedData) {
-      ['top', 'bottom'].forEach(section => {
+      const updated = this.createBookmark(updatedData);
+      
+      // Use indexed lookup instead of iteration
+      const sections = ['top', 'bottom'];
+      for (const section of sections) {
         const items = this.store.sections[section].items;
         const index = items.findIndex(b => b.id === bookmarkId);
-        
         if (index !== -1) {
-          const updated = this.createBookmark(updatedData);
           items.splice(index, 1, updated);
+          break; // Bookmark can only be in one section
         }
-      });
+      }
       
       // Update search results if present
       const searchIndex = this.store.search.results.findIndex(b => b.id === bookmarkId);
       if (searchIndex !== -1) {
-        const updated = this.createBookmark(updatedData);
         this.store.search.results.splice(searchIndex, 1, updated);
       }
       
-      // Clear icon cache
-      this.iconCache.forEach((value, key) => {
-        if (key.includes(bookmarkId) || key.includes(updatedData.url)) {
-          this.iconCache.delete(key);
-        }
-      });
+      // Clear only relevant icon cache entries
+      const oldNotes = updatedData.notes || '';
+      const newKey = `${oldNotes}__${updatedData.url || ''}`;
+      this.iconCache.delete(newKey);
+      
+      // Also try to clear the old key if notes changed
+      if (updatedData.notes) {
+        const altKey = `__${updatedData.url || ''}`;
+        this.iconCache.delete(altKey);
+      }
     },
     
     // DRAG AND DROP METHODS
