@@ -10,7 +10,8 @@ createApp({
           bottom: { items: [], status: 'loading', error: '' }
         },
         search: { query: '', results: [], status: 'idle', error: '' },
-        meta: { loadedAt: null }
+        meta: { loadedAt: null },
+        ui: { errorMessage: '', errorTimeout: null }
       },
       
       // UI state
@@ -85,6 +86,22 @@ createApp({
   },
   
   methods: {
+    // ERROR FEEDBACK METHODS
+    showError(message, duration = 5000) {
+      clearTimeout(this.store.ui.errorTimeout);
+      this.store.ui.errorMessage = message;
+      if (duration > 0) {
+        this.store.ui.errorTimeout = setTimeout(() => {
+          this.store.ui.errorMessage = '';
+        }, duration);
+      }
+    },
+    
+    hideError() {
+      clearTimeout(this.store.ui.errorTimeout);
+      this.store.ui.errorMessage = '';
+    },
+    
     // API METHODS
     async apiCall(path, options = {}) {
       const { signal, params, timeout = 10000, retry = 1 } = options;
@@ -134,17 +151,24 @@ createApp({
     },
     
     async updateBookmark(bookmarkId, data) {
-      const response = await fetch(`/api/bookmarks/${bookmarkId}/`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to update bookmark: ${response.status}`);
+      try {
+        const response = await fetch(`/api/bookmarks/${bookmarkId}/`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+          signal: AbortSignal.timeout(10000)
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => '');
+          throw new Error(`Failed to update bookmark: ${response.status}${errorText ? ' - ' + errorText : ''}`);
+        }
+        
+        return response.json();
+      } catch (error) {
+        this.showError(`Update failed: ${error.message}`);
+        throw error;
       }
-      
-      return response.json();
     },
     
     // BOOKMARK METHODS
