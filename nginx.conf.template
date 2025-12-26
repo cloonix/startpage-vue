@@ -73,6 +73,9 @@ http {
 
         # Optimized API proxy
         location /api/ {
+            # Disable logging to prevent token exposure
+            access_log off;
+            
             proxy_pass ${LINKDING_BASE_URL}/api/;
             proxy_set_header Authorization "Token ${LINKDING_API_TOKEN}";
             proxy_set_header Host ${LINKDING_HOST};
