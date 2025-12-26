@@ -22,6 +22,23 @@ createApp({
         API_CACHE_DURATION_MIN: 2
       },
       
+      // Error Messages
+      ERROR_MESSAGES: {
+        API_TIMEOUT: 'Request timed out. Please check your connection and try again.',
+        API_NETWORK: 'Network error. Please check your connection.',
+        API_SERVER: 'Server error. Please try again later.',
+        API_NOT_FOUND: 'Resource not found.',
+        API_UNAUTHORIZED: 'Authentication failed. Please check your API token.',
+        SEARCH_FAILED: 'Search failed. Please try again.',
+        BOOKMARK_UPDATE_FAILED: 'Failed to update bookmark. Please try again.',
+        BOOKMARK_LOAD_FAILED: (attempts) => `Failed to load bookmarks after ${attempts} attempts. Please check your connection and refresh.`,
+        INVALID_URL: 'Please enter a valid URL (must start with http:// or https://)',
+        ICON_UPDATE_LOADING: 'Updating icon...',
+        ICON_UPDATE_SUCCESS: (name) => `✓ Icon updated for ${name}`,
+        ICON_UPDATE_FAILED: 'Failed to update icon. Please try again.',
+        GENERIC_ERROR: (message) => `Error: ${message}`
+      },
+      
       // Core application state
       store: {
         sections: {
@@ -216,7 +233,7 @@ createApp({
         
         return response.json();
       } catch (error) {
-        this.showError(`Update failed: ${error.message}`);
+        this.showError(this.ERROR_MESSAGES.BOOKMARK_UPDATE_FAILED);
         throw error;
       }
     },
@@ -465,7 +482,7 @@ createApp({
         
         this.store.search.results = [];
         this.store.search.status = 'error';
-        this.store.search.error = error.message || 'Search failed';
+        this.store.search.error = error.message || this.ERROR_MESSAGES.SEARCH_FAILED;
       } finally {
         if (this.controllers.searchId === searchId) {
           this.controllers.search = null;
@@ -539,9 +556,9 @@ createApp({
           if (attempt >= maxRetries) {
             this.store.sections.top.status = 'error';
             this.store.sections.bottom.status = 'error';
-            this.store.sections.top.error = 'Failed to load bookmarks. Please refresh the page.';
+            this.store.sections.top.error = this.ERROR_MESSAGES.BOOKMARK_LOAD_FAILED(maxRetries);
             this.store.sections.bottom.error = error.message;
-            this.showError(`Failed to load bookmarks after ${maxRetries} attempts. Please check your connection and refresh.`, this.CONSTANTS.ERROR_TOAST_DURATION_MS * 2);
+            this.showError(this.ERROR_MESSAGES.BOOKMARK_LOAD_FAILED(maxRetries), this.CONSTANTS.ERROR_TOAST_DURATION_MS * 2);
           } else {
             // Wait before retry with exponential backoff
             await new Promise(resolve => setTimeout(resolve, this.CONSTANTS.RETRY_BASE_DELAY_MS * attempt));
@@ -788,16 +805,16 @@ createApp({
       try {
         const parsed = new URL(cleanIconUrl);
         if (!['http:', 'https:'].includes(parsed.protocol)) {
-          this.showError('Please enter a valid URL (must start with http:// or https://)', this.CONSTANTS.ERROR_TOAST_DURATION_MS);
+          this.showError(this.ERROR_MESSAGES.INVALID_URL, this.CONSTANTS.ERROR_TOAST_DURATION_MS);
           return;
         }
       } catch {
-        this.showError('Please enter a valid URL (must start with http:// or https://)', this.CONSTANTS.ERROR_TOAST_DURATION_MS);
+        this.showError(this.ERROR_MESSAGES.INVALID_URL, this.CONSTANTS.ERROR_TOAST_DURATION_MS);
         return;
       }
       
       // Show loading state
-      this.showError('Updating icon...', this.CONSTANTS.LOADING_TOAST_DURATION_MS);
+      this.showError(this.ERROR_MESSAGES.ICON_UPDATE_LOADING, this.CONSTANTS.LOADING_TOAST_DURATION_MS);
       
       try {
         // Get current data
@@ -810,13 +827,13 @@ createApp({
         
         if (result) {
           this.hideError();
-          this.showError(`✓ Icon updated for ${bookmark.name}`, this.CONSTANTS.SUCCESS_TOAST_DURATION_MS);
+          this.showError(this.ERROR_MESSAGES.ICON_UPDATE_SUCCESS(bookmark.name), this.CONSTANTS.SUCCESS_TOAST_DURATION_MS);
           this.$forceUpdate();
         } else {
-          this.showError('Failed to update icon. Please try again.', this.CONSTANTS.ERROR_TOAST_DURATION_MS);
+          this.showError(this.ERROR_MESSAGES.ICON_UPDATE_FAILED, this.CONSTANTS.ERROR_TOAST_DURATION_MS);
         }
       } catch (error) {
-        this.showError(`Error: ${error.message}`, this.CONSTANTS.ERROR_TOAST_DURATION_MS);
+        this.showError(this.ERROR_MESSAGES.GENERIC_ERROR(error.message), this.CONSTANTS.ERROR_TOAST_DURATION_MS);
       }
     },
     
