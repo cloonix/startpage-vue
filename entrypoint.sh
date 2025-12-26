@@ -5,8 +5,8 @@ set -e
 PORT=${PORT:-80}
 LINKDING_BASE_URL=${LINKDING_BASE_URL:-""}
 LINKDING_API_TOKEN=${LINKDING_API_TOKEN:-""}
-CF_ACCESS_CLIENT_ID=${CF_ACCESS_CLIENT_ID:-""}
-CF_ACCESS_CLIENT_SECRET=${CF_ACCESS_CLIENT_SECRET:-""}
+P_ACCESS_TOKEN_ID=${P_ACCESS_TOKEN_ID:-""}
+P_ACCESS_TOKEN=${P_ACCESS_TOKEN:-""}
 
 # Validate required variables
 if [ -z "$LINKDING_BASE_URL" ] || [ -z "$LINKDING_API_TOKEN" ]; then
@@ -35,11 +35,11 @@ if echo "$LINKDING_BASE_URL" | grep -q "your_.*_here"; then
     exit 1
 fi
 
-# Warn if Cloudflare Access is partially configured
-if [ -n "$CF_ACCESS_CLIENT_ID" ] && [ -z "$CF_ACCESS_CLIENT_SECRET" ] || \
-   [ -z "$CF_ACCESS_CLIENT_ID" ] && [ -n "$CF_ACCESS_CLIENT_SECRET" ]; then
-    echo "Warning: Cloudflare Access requires both CLIENT_ID and CLIENT_SECRET" >&2
-    echo "Only one is set - Cloudflare Access will not work properly" >&2
+# Warn if Proxy Access is partially configured
+if [ -n "$P_ACCESS_TOKEN_ID" ] && [ -z "$P_ACCESS_TOKEN" ] || \
+   [ -z "$P_ACCESS_TOKEN_ID" ] && [ -n "$P_ACCESS_TOKEN" ]; then
+    echo "Warning: Proxy Access requires both P_ACCESS_TOKEN_ID and P_ACCESS_TOKEN" >&2
+    echo "Only one is set - Proxy authentication will not work properly" >&2
 fi
 
 # Extract hostname from URL
@@ -56,13 +56,13 @@ echo "Starting nginx with configuration:"
 echo "- Port: $PORT"
 echo "- Linkding URL: $LINKDING_BASE_URL"
 echo "- Linkding Host: $LINKDING_HOST"
-echo "- Cloudflare Access: ${CF_ACCESS_CLIENT_ID:+Enabled}"
+echo "- Proxy Access: ${P_ACCESS_TOKEN_ID:+Enabled}"
 
 # Export variables for envsubst
-export PORT LINKDING_BASE_URL LINKDING_HOST LINKDING_API_TOKEN CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET
+export PORT LINKDING_BASE_URL LINKDING_HOST LINKDING_API_TOKEN P_ACCESS_TOKEN_ID P_ACCESS_TOKEN
 
 # Generate nginx config from template
-envsubst '${PORT} ${LINKDING_BASE_URL} ${LINKDING_HOST} ${LINKDING_API_TOKEN} ${CF_ACCESS_CLIENT_ID} ${CF_ACCESS_CLIENT_SECRET}' \
+envsubst '${PORT} ${LINKDING_BASE_URL} ${LINKDING_HOST} ${LINKDING_API_TOKEN} ${P_ACCESS_TOKEN_ID} ${P_ACCESS_TOKEN}' \
     < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
 # Test configuration

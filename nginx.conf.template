@@ -79,8 +79,8 @@ http {
             proxy_pass ${LINKDING_BASE_URL}/api/;
             proxy_set_header Authorization "Token ${LINKDING_API_TOKEN}";
             proxy_set_header Host ${LINKDING_HOST};
-            proxy_set_header CF-Access-Client-Id "${CF_ACCESS_CLIENT_ID}";
-            proxy_set_header CF-Access-Client-Secret "${CF_ACCESS_CLIENT_SECRET}";
+            proxy_set_header P-Access-Token-Id "${P_ACCESS_TOKEN_ID}";
+            proxy_set_header P-Access-Token "${P_ACCESS_TOKEN}";
             
             # SSL optimizations
             proxy_ssl_server_name on;
