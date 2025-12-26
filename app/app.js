@@ -32,7 +32,8 @@ createApp({
         draggedFrom: null,
         startX: 0,
         startY: 0,
-        preview: null
+        preview: null,
+        previewElement: null // Reusable preview element
       }
     };
   },
@@ -616,8 +617,15 @@ createApp({
     },
     
     createDragPreview(x, y) {
-      const preview = document.createElement('div');
-      preview.className = 'drag-preview';
+      // Reuse existing preview if available
+      if (!this.dragState.previewElement) {
+        const preview = document.createElement('div');
+        preview.className = 'drag-preview';
+        this.dragState.previewElement = preview;
+        document.body.appendChild(preview);
+      }
+      
+      const preview = this.dragState.previewElement;
       const item = this.dragState.draggedItem;
       
       preview.innerHTML = `
@@ -627,9 +635,9 @@ createApp({
         </div>
       `;
       
+      preview.style.display = 'block';
       preview.style.left = (x + 10) + 'px';
       preview.style.top = (y + 10) + 'px';
-      document.body.appendChild(preview);
       this.dragState.preview = preview;
     },
     
@@ -762,7 +770,8 @@ createApp({
     
     cleanupDrag() {
       if (this.dragState.preview) {
-        document.body.removeChild(this.dragState.preview);
+        this.dragState.preview.style.display = 'none';
+        // Don't remove from DOM, just hide it for reuse
       }
       
       document.removeEventListener('mousemove', this.onMouseMove);
@@ -777,7 +786,8 @@ createApp({
         draggedFrom: null,
         startX: 0,
         startY: 0,
-        preview: null
+        preview: null,
+        previewElement: this.dragState.previewElement // Keep reusable element
       };
     },
     
@@ -858,5 +868,10 @@ createApp({
     clearTimeout(this.timers.search);
     if (this.controllers.search) this.controllers.search.abort();
     if (this.dragState.isDragging) this.cleanupDrag();
+    
+    // Clean up drag preview element on component unmount
+    if (this.dragState.previewElement) {
+      document.body.removeChild(this.dragState.previewElement);
+    }
   }
 }).mount('#app');
