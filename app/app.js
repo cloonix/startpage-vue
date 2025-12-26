@@ -726,24 +726,37 @@ createApp({
       
       // Validate URL
       try {
-        new URL(cleanIconUrl);
+        const parsed = new URL(cleanIconUrl);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          this.showError('Please enter a valid URL (must start with http:// or https://)', 5000);
+          return;
+        }
       } catch {
-        alert('Please enter a valid URL (must start with http:// or https://)');
+        this.showError('Please enter a valid URL (must start with http:// or https://)', 5000);
         return;
       }
       
-      // Get current data
-      const currentData = this.parseBookmarkNotes(bookmark.notes) || {};
-      const section = currentData.section || 'bottom'; // Default to bottom if no section specified
-      const group = currentData.group || 'default';
+      // Show loading state
+      this.showError('Updating icon...', 0);
       
-      // Update with new icon
-      const result = await this.updateBookmarkNotes(bookmark, section, group, cleanIconUrl);
-      if (result) {
-        console.log(`Updated icon for ${bookmark.name}`);
-        this.$forceUpdate();
-      } else {
-        alert('Failed to update icon. Please try again.');
+      try {
+        // Get current data
+        const currentData = this.parseBookmarkNotes(bookmark.notes) || {};
+        const section = currentData.section || 'bottom'; // Default to bottom if no section specified
+        const group = currentData.group || 'default';
+        
+        // Update with new icon
+        const result = await this.updateBookmarkNotes(bookmark, section, group, cleanIconUrl);
+        
+        if (result) {
+          this.hideError();
+          this.showError(`✓ Icon updated for ${bookmark.name}`, 3000);
+          this.$forceUpdate();
+        } else {
+          this.showError('Failed to update icon. Please try again.', 5000);
+        }
+      } catch (error) {
+        this.showError(`Error: ${error.message}`, 5000);
       }
     },
     
