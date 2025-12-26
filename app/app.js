@@ -452,35 +452,52 @@ createApp({
     },
     
     async loadAllBookmarks() {
-      try {
-        // Fetch all bookmarks with the 'startpage' tag
-        const allBookmarks = await this.fetchBookmarksByTag('#startpage');
-        
-        // Organize by JSON data (section property determines top/bottom)
-        const top = [];
-        const bottom = [];
-        
-        allBookmarks.forEach(bookmark => {
-          const jsonData = this.parseBookmarkNotes(bookmark.notes);
+      const maxRetries = 3;
+      let attempt = 0;
+      
+      while (attempt < maxRetries) {
+        try {
+          // Fetch all bookmarks with the 'startpage' tag
+          const allBookmarks = await this.fetchBookmarksByTag('#startpage');
           
-          if (jsonData?.section === 'top') {
-            top.push(bookmark);
-          } else if (jsonData?.section === 'bottom') {
-            bottom.push(bookmark);
+          // Organize by JSON data (section property determines top/bottom)
+          const top = [];
+          const bottom = [];
+          
+          allBookmarks.forEach(bookmark => {
+            const jsonData = this.parseBookmarkNotes(bookmark.notes);
+            
+            if (jsonData?.section === 'top') {
+              top.push(bookmark);
+            } else if (jsonData?.section === 'bottom') {
+              bottom.push(bookmark);
+            } else {
+              // Default fallback: put in bottom section if no JSON data
+              bottom.push(bookmark);
+            }
+          });
+          
+          this.store.sections.top.items = top;
+          this.store.sections.bottom.items = bottom;
+          this.store.sections.top.status = 'success';
+          this.store.sections.bottom.status = 'success';
+          return; // Success, exit
+          
+        } catch (error) {
+          attempt++;
+          console.error(`Failed to load bookmarks (attempt ${attempt}/${maxRetries}):`, error);
+          
+          if (attempt >= maxRetries) {
+            this.store.sections.top.status = 'error';
+            this.store.sections.bottom.status = 'error';
+            this.store.sections.top.error = 'Failed to load bookmarks. Please refresh the page.';
+            this.store.sections.bottom.error = error.message;
+            this.showError('Failed to load bookmarks after 3 attempts. Please check your connection and refresh.', 10000);
           } else {
-            // Default fallback: put in bottom section if no JSON data
-            bottom.push(bookmark);
+            // Wait before retry with exponential backoff
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
           }
-        });
-        
-        this.store.sections.top.items = top;
-        this.store.sections.bottom.items = bottom;
-        this.store.sections.top.status = 'success';
-        this.store.sections.bottom.status = 'success';
-      } catch (error) {
-        console.error('Failed to load bookmarks:', error);
-        this.store.sections.top.status = 'error';
-        this.store.sections.bottom.status = 'error';
+        }
       }
     },
     

@@ -69,6 +69,16 @@
                     <template v-if="store.sections.top.status === 'loading'">
                         <div v-for="n in 7" :key="'skeleton-top-' + n" class="skeleton bookmark-item"></div>
                     </template>
+                    <template v-else-if="store.sections.top.status === 'error'">
+                        <div class="col-span-full text-center p-8">
+                            <p class="text-sm mb-3" style="color: var(--text-secondary)">{{ store.sections.top.error }}</p>
+                            <button @click="loadAllBookmarks" 
+                                    class="px-4 py-2 rounded text-sm font-medium transition-colors"
+                                    style="background: var(--accent); color: white;">
+                                Retry
+                            </button>
+                        </div>
+                    </template>
                     <template v-else>
                         <a v-for="bookmark in sortedTopBookmarks" :key="bookmark.id" 
                            :href="bookmark.link"
@@ -134,6 +144,16 @@
                         <div v-for="n in 7" :key="'skeleton-bottom-' + n" class="bookmark-column">
                             <div class="skeleton w-20 h-5 mx-auto mb-3"></div>
                             <div v-for="i in 3" :key="'skeleton-item-' + n + '-' + i" class="skeleton bookmark-item"></div>
+                        </div>
+                    </template>
+                    <template v-else-if="store.sections.bottom.status === 'error'">
+                        <div class="col-span-full text-center p-8">
+                            <p class="text-sm mb-3" style="color: var(--text-secondary)">{{ store.sections.bottom.error }}</p>
+                            <button @click="loadAllBookmarks" 
+                                    class="px-4 py-2 rounded text-sm font-medium transition-colors"
+                                    style="background: var(--accent); color: white;">
+                                Retry
+                            </button>
                         </div>
                     </template>
                     <template v-else>
