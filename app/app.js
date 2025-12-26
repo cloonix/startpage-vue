@@ -20,6 +20,7 @@ createApp({
       
       // Caching and performance
       iconCache: new Map(),
+      iconCacheMaxSize: 500,
       controllers: { search: null },
       timers: { search: null },
       
@@ -223,8 +224,13 @@ createApp({
     // ICON METHODS
     resolveIcon(notes, url) {
       const cacheKey = `${notes || ''}__${url || ''}`;
+      
+      // Check cache and move to end (LRU)
       if (this.iconCache.has(cacheKey)) {
-        return this.iconCache.get(cacheKey);
+        const value = this.iconCache.get(cacheKey);
+        this.iconCache.delete(cacheKey);
+        this.iconCache.set(cacheKey, value);
+        return value;
       }
       
       let iconUrl = '';
@@ -246,6 +252,12 @@ createApp({
       // Final fallback: domain favicon or placeholder
       if (!iconUrl) {
         iconUrl = this.getFaviconUrl(url) || this.getPlaceholderIcon();
+      }
+      
+      // Evict oldest entry if cache is full
+      if (this.iconCache.size >= this.iconCacheMaxSize) {
+        const firstKey = this.iconCache.keys().next().value;
+        this.iconCache.delete(firstKey);
       }
       
       this.iconCache.set(cacheKey, iconUrl);
