@@ -25,6 +25,10 @@ http {
         add_header X-Content-Type-Options nosniff always;
         add_header X-Frame-Options DENY always;
         add_header X-XSS-Protection "1; mode=block" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        
+        # Content Security Policy
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https: http:; connect-src 'self' ${LINKDING_BASE_URL}; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';" always;
 
         # CORS for API
         add_header Access-Control-Allow-Origin "*" always;
@@ -69,11 +73,14 @@ http {
 
         # Optimized API proxy
         location /api/ {
+            # Disable logging to prevent token exposure
+            access_log off;
+            
             proxy_pass ${LINKDING_BASE_URL}/api/;
             proxy_set_header Authorization "Token ${LINKDING_API_TOKEN}";
             proxy_set_header Host ${LINKDING_HOST};
-            proxy_set_header CF-Access-Client-Id "${CF_ACCESS_CLIENT_ID}";
-            proxy_set_header CF-Access-Client-Secret "${CF_ACCESS_CLIENT_SECRET}";
+            proxy_set_header P-Access-Token-Id "${P_ACCESS_TOKEN_ID}";
+            proxy_set_header P-Access-Token "${P_ACCESS_TOKEN}";
             
             # SSL optimizations
             proxy_ssl_server_name on;

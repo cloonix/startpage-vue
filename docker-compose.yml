@@ -1,4 +1,15 @@
+# Docker Compose configuration for Vue Startpage
+# 
+# Development mode (default):
+#   docker compose up -d
+#   Runs on port 3000 (configurable via PORT env var)
+#
+# Production mode:
+#   docker compose --profile prod up -d
+#   Runs on port 81 (configurable via PROD_PORT env var)
+
 services:
+  # Development/Default service
   startpage-vue:
     build:
       context: .
@@ -24,3 +35,35 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    profiles:
+      - ""  # Default profile (runs without --profile flag)
+
+  # Production service (use with --profile prod)
+  startpage-prod:
+    build:
+      context: .
+      args:
+        APP_HASH: ${APP_HASH:-prod}
+        CSS_HASH: ${CSS_HASH:-prod}
+        VERSION: ${VERSION:-prod}
+    container_name: startpage-prod
+    ports:
+      - "${PROD_PORT:-81}:80"
+    environment:
+      - PORT=80
+      - LINKDING_BASE_URL=${LINKDING_BASE_URL}
+      - LINKDING_API_TOKEN=${LINKDING_API_TOKEN}
+      - CF_ACCESS_CLIENT_ID=${CF_ACCESS_CLIENT_ID}
+      - CF_ACCESS_CLIENT_SECRET=${CF_ACCESS_CLIENT_SECRET}
+      - NODE_ENV=production
+    restart: unless-stopped
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    profiles:
+      - prod

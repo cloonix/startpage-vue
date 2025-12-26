@@ -4,23 +4,54 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vue Startpage</title>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://unpkg.com/vue@3.5.26/dist/vue.global.prod.js"
+            integrity="sha384-URubc0MEfwoL+eIUjc/tCTFzyftmqacIvTy7SMGCCDxy5hb5LcCxBu9Xg5eZFftg"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.18"
+            integrity="sha384-WrpyCFNrMmN/IC7KmMNiXxIouXEFpoDIuJ2P+ys++uYEzegAW2MSl+X6Unsahaij"
+            crossorigin="anonymous"></script>
     <link rel="preconnect" href="https://placehold.co">
     <link rel="stylesheet" href="styles.css?v=CSS_HASH">
 </head>
 
 <body class="flex flex-col items-center p-4">
     <div id="app" class="w-full max-w-6xl">
+        <!-- Error Toast -->
+        <div v-if="store.ui.errorMessage" 
+             class="error-message fixed top-4 right-4 z-50 max-w-md p-4 rounded-lg shadow-lg animate-slide-in">
+            <div class="flex items-start gap-3">
+                <svg class="w-5 h-5 flex-shrink-0 mt-0.5" style="color: var(--error)" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div class="flex-1">
+                    <p class="text-sm font-medium" style="color: var(--text-primary)">{{ store.ui.errorMessage }}</p>
+                </div>
+                <button @click="hideError" class="flex-shrink-0" style="color: var(--text-muted)" aria-label="Close error">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        
         <!-- Header -->
         <header class="mb-4 text-center">
             <p class="header-text">Use ↑↓ or Ctrl+j/k to navigate • Enter to open • Esc to reset</p>
+            <!-- Hidden instructions for screen readers -->
+            <div id="search-instructions" class="sr-only">
+                Type at least 2 characters to search. Use arrow keys or Ctrl+J/K to navigate results. Press Enter to open selected bookmark. Press Escape to clear search.
+            </div>
         </header>
         
         <!-- Search -->
-        <section class="mb-4 flex justify-center px-4">
+        <section class="mb-4 flex justify-center px-4" role="search">
             <div class="relative w-full max-w-lg">
-                <input v-model="store.search.query" ref="searchInput" type="text" placeholder="Search bookmarks..." 
+                <input v-model="store.search.query" 
+                       ref="searchInput" 
+                       type="text" 
+                       placeholder="Search bookmarks..." 
+                       aria-label="Search bookmarks"
+                       aria-describedby="search-instructions"
                        class="search-input w-full px-4 py-2 pl-10 focus:outline-none">
                 <svg v-if="store.search.status !== 'loading'" class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style="color: var(--text-muted)" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
@@ -47,9 +78,21 @@
                     <template v-if="store.sections.top.status === 'loading'">
                         <div v-for="n in 7" :key="'skeleton-top-' + n" class="skeleton bookmark-item"></div>
                     </template>
+                    <template v-else-if="store.sections.top.status === 'error'">
+                        <div class="col-span-full text-center p-8">
+                            <p class="text-sm mb-3" style="color: var(--text-secondary)">{{ store.sections.top.error }}</p>
+                            <button @click="loadAllBookmarks" 
+                                    class="px-4 py-2 rounded text-sm font-medium transition-colors"
+                                    style="background: var(--accent); color: white;">
+                                Retry
+                            </button>
+                        </div>
+                    </template>
                     <template v-else>
                         <a v-for="bookmark in sortedTopBookmarks" :key="bookmark.id" 
                            :href="bookmark.link"
+                           :aria-label="`Open ${bookmark.name}`"
+                           role="link"
                            class="bookmark-item bookmark-link draggable"
                            :class="{ 'dragging': dragState.draggedItem?.id === bookmark.id }"
                            :data-bookmark-id="bookmark.id" 
@@ -114,6 +157,16 @@
                             <div v-for="i in 3" :key="'skeleton-item-' + n + '-' + i" class="skeleton bookmark-item"></div>
                         </div>
                     </template>
+                    <template v-else-if="store.sections.bottom.status === 'error'">
+                        <div class="col-span-full text-center p-8">
+                            <p class="text-sm mb-3" style="color: var(--text-secondary)">{{ store.sections.bottom.error }}</p>
+                            <button @click="loadAllBookmarks" 
+                                    class="px-4 py-2 rounded text-sm font-medium transition-colors"
+                                    style="background: var(--accent); color: white;">
+                                Retry
+                            </button>
+                        </div>
+                    </template>
                     <template v-else>
                         <div v-for="(bookmarks, tag) in groupedBottomBookmarks" :key="tag" 
                              class="bookmark-column" :data-group="tag">
@@ -122,6 +175,8 @@
                             </h3>
                             <a v-for="bookmark in bookmarks" :key="bookmark.id" 
                                :href="bookmark.link"
+                               :aria-label="`Open ${bookmark.name} in ${tag} category`"
+                               role="link"
                                class="bookmark-item bookmark-link draggable"
                                :class="{ 'dragging': dragState.draggedItem?.id === bookmark.id }"
                                :data-bookmark-id="bookmark.id" 

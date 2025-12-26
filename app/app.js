@@ -3,6 +3,42 @@ const { createApp } = Vue;
 createApp({
   data() {
     return {
+      // Constants
+      CONSTANTS: {
+        SEARCH_MIN_LENGTH: 2,
+        SEARCH_DEBOUNCE_MS: 200,
+        API_TIMEOUT_MS: 10000,
+        API_RETRY_COUNT: 1,
+        ICON_PRELOAD_LIMIT: 8,
+        ICON_PRELOAD_DELAY_MS: 150,
+        ICON_CACHE_MAX_SIZE: 500,
+        DRAG_THRESHOLD_PX: 5,
+        BOOKMARK_LIMIT_PER_PAGE: 100,
+        RETRY_MAX_ATTEMPTS: 3,
+        RETRY_BASE_DELAY_MS: 1000,
+        ERROR_TOAST_DURATION_MS: 5000,
+        SUCCESS_TOAST_DURATION_MS: 3000,
+        LOADING_TOAST_DURATION_MS: 0,
+        API_CACHE_DURATION_MIN: 2
+      },
+      
+      // Error Messages
+      ERROR_MESSAGES: {
+        API_TIMEOUT: 'Request timed out. Please check your connection and try again.',
+        API_NETWORK: 'Network error. Please check your connection.',
+        API_SERVER: 'Server error. Please try again later.',
+        API_NOT_FOUND: 'Resource not found.',
+        API_UNAUTHORIZED: 'Authentication failed. Please check your API token.',
+        SEARCH_FAILED: 'Search failed. Please try again.',
+        BOOKMARK_UPDATE_FAILED: 'Failed to update bookmark. Please try again.',
+        BOOKMARK_LOAD_FAILED: (attempts) => `Failed to load bookmarks after ${attempts} attempts. Please check your connection and refresh.`,
+        INVALID_URL: 'Please enter a valid URL (must start with http:// or https://)',
+        ICON_UPDATE_LOADING: 'Updating icon...',
+        ICON_UPDATE_SUCCESS: (name) => `✓ Icon updated for ${name}`,
+        ICON_UPDATE_FAILED: 'Failed to update icon. Please try again.',
+        GENERIC_ERROR: (message) => `Error: ${message}`
+      },
+      
       // Core application state
       store: {
         sections: {
@@ -10,7 +46,8 @@ createApp({
           bottom: { items: [], status: 'loading', error: '' }
         },
         search: { query: '', results: [], status: 'idle', error: '' },
-        meta: { loadedAt: null }
+        meta: { loadedAt: null },
+        ui: { errorMessage: '', errorTimeout: null }
       },
       
       // UI state
@@ -19,7 +56,13 @@ createApp({
       
       // Caching and performance
       iconCache: new Map(),
-      controllers: { search: null },
+      sortedCache: {
+        top: null,
+        bottom: null,
+        topVersion: 0,
+        bottomVersion: 0
+      },
+      controllers: { search: null, searchId: null },
       timers: { search: null },
       
       // Drag and drop state
@@ -30,7 +73,8 @@ createApp({
         draggedFrom: null,
         startX: 0,
         startY: 0,
-        preview: null
+        preview: null,
+        previewElement: null // Reusable preview element
       }
     };
   },
@@ -39,6 +83,13 @@ createApp({
     // Alphabetically sorted groups with alphabetically sorted bookmarks
     groupedBottomBookmarks() {
       const bookmarks = this.store.sections.bottom.items || [];
+      
+      // Check if cache is valid
+      if (this.sortedCache.bottom && 
+          this.sortedCache.bottomVersion === bookmarks.length) {
+        return this.sortedCache.bottom;
+      }
+      
       const grouped = {};
       
       bookmarks.forEach(bookmark => {
@@ -55,13 +106,30 @@ createApp({
         sorted[key] = grouped[key].sort((a, b) => a.name.localeCompare(b.name));
       });
       
+      // Update cache
+      this.sortedCache.bottom = sorted;
+      this.sortedCache.bottomVersion = bookmarks.length;
+      
       return sorted;
     },
     
     // Alphabetically sorted top bookmarks
     sortedTopBookmarks() {
-      return [...(this.store.sections.top.items || [])]
-        .sort((a, b) => a.name.localeCompare(b.name));
+      const items = this.store.sections.top.items || [];
+      
+      // Check if cache is valid
+      if (this.sortedCache.top && 
+          this.sortedCache.topVersion === items.length) {
+        return this.sortedCache.top;
+      }
+      
+      const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
+      
+      // Update cache
+      this.sortedCache.top = sorted;
+      this.sortedCache.topVersion = items.length;
+      
+      return sorted;
     },
     
     // Enhanced search results with highlighting
@@ -85,9 +153,25 @@ createApp({
   },
   
   methods: {
+    // ERROR FEEDBACK METHODS
+    showError(message, duration = this.CONSTANTS.ERROR_TOAST_DURATION_MS) {
+      clearTimeout(this.store.ui.errorTimeout);
+      this.store.ui.errorMessage = message;
+      if (duration > 0) {
+        this.store.ui.errorTimeout = setTimeout(() => {
+          this.store.ui.errorMessage = '';
+        }, duration);
+      }
+    },
+    
+    hideError() {
+      clearTimeout(this.store.ui.errorTimeout);
+      this.store.ui.errorMessage = '';
+    },
+    
     // API METHODS
     async apiCall(path, options = {}) {
-      const { signal, params, timeout = 10000, retry = 1 } = options;
+      const { signal, params, timeout = this.CONSTANTS.API_TIMEOUT_MS, retry = this.CONSTANTS.API_RETRY_COUNT } = options;
       const url = new URL(path, window.location.origin);
       
       if (params) {
@@ -122,7 +206,7 @@ createApp({
           
           // Retry on network errors
           if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300));
+            await new Promise(resolve => setTimeout(resolve, this.CONSTANTS.SEARCH_DEBOUNCE_MS + Math.random() * 300));
             return attempt(retryCount + 1);
           }
           
@@ -134,17 +218,24 @@ createApp({
     },
     
     async updateBookmark(bookmarkId, data) {
-      const response = await fetch(`/api/bookmarks/${bookmarkId}/`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to update bookmark: ${response.status}`);
+      try {
+        const response = await fetch(`/api/bookmarks/${bookmarkId}/`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+          signal: AbortSignal.timeout(this.CONSTANTS.API_TIMEOUT_MS)
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => '');
+          throw new Error(`Failed to update bookmark: ${response.status}${errorText ? ' - ' + errorText : ''}`);
+        }
+        
+        return response.json();
+      } catch (error) {
+        this.showError(this.ERROR_MESSAGES.BOOKMARK_UPDATE_FAILED);
+        throw error;
       }
-      
-      return response.json();
     },
     
     // BOOKMARK METHODS
@@ -199,8 +290,13 @@ createApp({
     // ICON METHODS
     resolveIcon(notes, url) {
       const cacheKey = `${notes || ''}__${url || ''}`;
+      
+      // Check cache and move to end (LRU)
       if (this.iconCache.has(cacheKey)) {
-        return this.iconCache.get(cacheKey);
+        const value = this.iconCache.get(cacheKey);
+        this.iconCache.delete(cacheKey);
+        this.iconCache.set(cacheKey, value);
+        return value;
       }
       
       let iconUrl = '';
@@ -222,6 +318,12 @@ createApp({
       // Final fallback: domain favicon or placeholder
       if (!iconUrl) {
         iconUrl = this.getFaviconUrl(url) || this.getPlaceholderIcon();
+      }
+      
+      // Evict oldest entry if cache is full
+      if (this.iconCache.size >= this.CONSTANTS.ICON_CACHE_MAX_SIZE) {
+        const firstKey = this.iconCache.keys().next().value;
+        this.iconCache.delete(firstKey);
       }
       
       this.iconCache.set(cacheKey, iconUrl);
@@ -298,44 +400,71 @@ createApp({
       }
     },
     
+    escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    },
+    
+    isSafeUrl(url) {
+      try {
+        const parsed = new URL(url);
+        return ['http:', 'https:'].includes(parsed.protocol);
+      } catch {
+        return false;
+      }
+    },
+    
     highlightText(text, query) {
       if (!query?.trim() || !text) return text;
+      
+      // Escape HTML first to prevent XSS
+      const escaped = this.escapeHtml(text);
       
       try {
         return query.split(' ')
           .filter(Boolean)
           .reduce((result, word) => {
-            const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             return result.replace(
-              new RegExp(`(${escaped})`, 'gi'),
+              new RegExp(`(${escapedWord})`, 'gi'),
               '<mark class="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">$1</mark>'
             );
-          }, text);
+          }, escaped);
       } catch {
-        return text;
+        return escaped;
       }
     },
     
     async searchBookmarks(query) {
       const normalizedQuery = query.trim().toLowerCase();
       
-      if (normalizedQuery.length < 2) {
+      if (normalizedQuery.length < this.CONSTANTS.SEARCH_MIN_LENGTH) {
         this.store.search = { query: '', results: [], status: 'idle', error: '' };
         return;
       }
       
+      // Cancel previous search
       this.controllers.search?.abort();
       
       const controller = new AbortController();
+      const searchId = Date.now(); // Unique search identifier
       this.controllers.search = controller;
+      this.controllers.searchId = searchId;
+      
       this.store.search.status = 'loading';
       this.store.search.error = '';
       
       try {
         const data = await this.apiCall('/api/bookmarks/', {
-          params: { limit: '100', q: normalizedQuery },
+          params: { limit: String(this.CONSTANTS.BOOKMARK_LIMIT_PER_PAGE), q: normalizedQuery },
           signal: controller.signal
         });
+        
+        // Only update if this is still the current search
+        if (this.controllers.searchId !== searchId) {
+          return;
+        }
         
         const results = (data?.results || []).map(item => this.createBookmark(item));
         this.store.search.results = results;
@@ -347,13 +476,15 @@ createApp({
         this.store.search.status = 'success';
         this.store.meta.loadedAt = new Date().toISOString();
       } catch (error) {
-        if (error.name === 'AbortError') return;
+        if (error.name === 'AbortError' || this.controllers.searchId !== searchId) {
+          return;
+        }
         
         this.store.search.results = [];
         this.store.search.status = 'error';
-        this.store.search.error = error.message || 'Search failed';
+        this.store.search.error = error.message || this.ERROR_MESSAGES.SEARCH_FAILED;
       } finally {
-        if (this.controllers.search === controller) {
+        if (this.controllers.searchId === searchId) {
           this.controllers.search = null;
         }
       }
@@ -387,39 +518,56 @@ createApp({
     },
     
     async loadAllBookmarks() {
-      try {
-        // Fetch all bookmarks with the 'startpage' tag
-        const allBookmarks = await this.fetchBookmarksByTag('#startpage');
-        
-        // Organize by JSON data (section property determines top/bottom)
-        const top = [];
-        const bottom = [];
-        
-        allBookmarks.forEach(bookmark => {
-          const jsonData = this.parseBookmarkNotes(bookmark.notes);
+      const maxRetries = this.CONSTANTS.RETRY_MAX_ATTEMPTS;
+      let attempt = 0;
+      
+      while (attempt < maxRetries) {
+        try {
+          // Fetch all bookmarks with the 'startpage' tag
+          const allBookmarks = await this.fetchBookmarksByTag('#startpage');
           
-          if (jsonData?.section === 'top') {
-            top.push(bookmark);
-          } else if (jsonData?.section === 'bottom') {
-            bottom.push(bookmark);
+          // Organize by JSON data (section property determines top/bottom)
+          const top = [];
+          const bottom = [];
+          
+          allBookmarks.forEach(bookmark => {
+            const jsonData = this.parseBookmarkNotes(bookmark.notes);
+            
+            if (jsonData?.section === 'top') {
+              top.push(bookmark);
+            } else if (jsonData?.section === 'bottom') {
+              bottom.push(bookmark);
+            } else {
+              // Default fallback: put in bottom section if no JSON data
+              bottom.push(bookmark);
+            }
+          });
+          
+          this.store.sections.top.items = top;
+          this.store.sections.bottom.items = bottom;
+          this.store.sections.top.status = 'success';
+          this.store.sections.bottom.status = 'success';
+          return; // Success, exit
+          
+        } catch (error) {
+          attempt++;
+          console.error(`Failed to load bookmarks (attempt ${attempt}/${maxRetries}):`, error);
+          
+          if (attempt >= maxRetries) {
+            this.store.sections.top.status = 'error';
+            this.store.sections.bottom.status = 'error';
+            this.store.sections.top.error = this.ERROR_MESSAGES.BOOKMARK_LOAD_FAILED(maxRetries);
+            this.store.sections.bottom.error = error.message;
+            this.showError(this.ERROR_MESSAGES.BOOKMARK_LOAD_FAILED(maxRetries), this.CONSTANTS.ERROR_TOAST_DURATION_MS * 2);
           } else {
-            // Default fallback: put in bottom section if no JSON data
-            bottom.push(bookmark);
+            // Wait before retry with exponential backoff
+            await new Promise(resolve => setTimeout(resolve, this.CONSTANTS.RETRY_BASE_DELAY_MS * attempt));
           }
-        });
-        
-        this.store.sections.top.items = top;
-        this.store.sections.bottom.items = bottom;
-        this.store.sections.top.status = 'success';
-        this.store.sections.bottom.status = 'success';
-      } catch (error) {
-        console.error('Failed to load bookmarks:', error);
-        this.store.sections.top.status = 'error';
-        this.store.sections.bottom.status = 'error';
+        }
       }
     },
     
-    preloadIcons(bookmarks, limit = 8) {
+    preloadIcons(bookmarks, limit = this.CONSTANTS.ICON_PRELOAD_LIMIT) {
       const loadIcon = (url) => {
         const img = new Image();
         img.src = url;
@@ -435,34 +583,44 @@ createApp({
         
         'requestIdleCallback' in window 
           ? requestIdleCallback(loadRemaining)
-          : setTimeout(loadRemaining, 150);
+          : setTimeout(loadRemaining, this.CONSTANTS.ICON_PRELOAD_DELAY_MS);
       }
     },
     
     updateLocalCache(bookmarkId, updatedData) {
-      ['top', 'bottom'].forEach(section => {
+      const updated = this.createBookmark(updatedData);
+      
+      // Use indexed lookup instead of iteration
+      const sections = ['top', 'bottom'];
+      for (const section of sections) {
         const items = this.store.sections[section].items;
         const index = items.findIndex(b => b.id === bookmarkId);
-        
         if (index !== -1) {
-          const updated = this.createBookmark(updatedData);
           items.splice(index, 1, updated);
+          break; // Bookmark can only be in one section
         }
-      });
+      }
       
       // Update search results if present
       const searchIndex = this.store.search.results.findIndex(b => b.id === bookmarkId);
       if (searchIndex !== -1) {
-        const updated = this.createBookmark(updatedData);
         this.store.search.results.splice(searchIndex, 1, updated);
       }
       
-      // Clear icon cache
-      this.iconCache.forEach((value, key) => {
-        if (key.includes(bookmarkId) || key.includes(updatedData.url)) {
-          this.iconCache.delete(key);
-        }
-      });
+      // Clear only relevant icon cache entries
+      const oldNotes = updatedData.notes || '';
+      const newKey = `${oldNotes}__${updatedData.url || ''}`;
+      this.iconCache.delete(newKey);
+      
+      // Also try to clear the old key if notes changed
+      if (updatedData.notes) {
+        const altKey = `__${updatedData.url || ''}`;
+        this.iconCache.delete(altKey);
+      }
+      
+      // Invalidate sort cache
+      this.sortedCache.top = null;
+      this.sortedCache.bottom = null;
     },
     
     // DRAG AND DROP METHODS
@@ -495,7 +653,7 @@ createApp({
       const deltaX = Math.abs(event.clientX - this.dragState.startX);
       const deltaY = Math.abs(event.clientY - this.dragState.startY);
       
-      if (!this.dragState.isDragging && (deltaX > 5 || deltaY > 5)) {
+      if (!this.dragState.isDragging && (deltaX > this.CONSTANTS.DRAG_THRESHOLD_PX || deltaY > this.CONSTANTS.DRAG_THRESHOLD_PX)) {
         this.startDrag(event);
       }
       
@@ -509,7 +667,12 @@ createApp({
         this.handleDrop(event);
       } else if (this.dragState.draggedType === 'bookmark') {
         // Just a click - navigate
-        window.location.href = this.dragState.draggedItem.link;
+        const link = this.dragState.draggedItem.link;
+        if (this.isSafeUrl(link)) {
+          window.location.href = link;
+        } else {
+          console.error('Unsafe URL blocked:', link);
+        }
       }
       
       this.cleanupDrag();
@@ -523,8 +686,15 @@ createApp({
     },
     
     createDragPreview(x, y) {
-      const preview = document.createElement('div');
-      preview.className = 'drag-preview';
+      // Reuse existing preview if available
+      if (!this.dragState.previewElement) {
+        const preview = document.createElement('div');
+        preview.className = 'drag-preview';
+        this.dragState.previewElement = preview;
+        document.body.appendChild(preview);
+      }
+      
+      const preview = this.dragState.previewElement;
       const item = this.dragState.draggedItem;
       
       preview.innerHTML = `
@@ -534,9 +704,9 @@ createApp({
         </div>
       `;
       
+      preview.style.display = 'block';
       preview.style.left = (x + 10) + 'px';
       preview.style.top = (y + 10) + 'px';
-      document.body.appendChild(preview);
       this.dragState.preview = preview;
     },
     
@@ -633,30 +803,44 @@ createApp({
       
       // Validate URL
       try {
-        new URL(cleanIconUrl);
+        const parsed = new URL(cleanIconUrl);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          this.showError(this.ERROR_MESSAGES.INVALID_URL, this.CONSTANTS.ERROR_TOAST_DURATION_MS);
+          return;
+        }
       } catch {
-        alert('Please enter a valid URL (must start with http:// or https://)');
+        this.showError(this.ERROR_MESSAGES.INVALID_URL, this.CONSTANTS.ERROR_TOAST_DURATION_MS);
         return;
       }
       
-      // Get current data
-      const currentData = this.parseBookmarkNotes(bookmark.notes) || {};
-      const section = currentData.section || 'bottom'; // Default to bottom if no section specified
-      const group = currentData.group || 'default';
+      // Show loading state
+      this.showError(this.ERROR_MESSAGES.ICON_UPDATE_LOADING, this.CONSTANTS.LOADING_TOAST_DURATION_MS);
       
-      // Update with new icon
-      const result = await this.updateBookmarkNotes(bookmark, section, group, cleanIconUrl);
-      if (result) {
-        console.log(`Updated icon for ${bookmark.name}`);
-        this.$forceUpdate();
-      } else {
-        alert('Failed to update icon. Please try again.');
+      try {
+        // Get current data
+        const currentData = this.parseBookmarkNotes(bookmark.notes) || {};
+        const section = currentData.section || 'bottom'; // Default to bottom if no section specified
+        const group = currentData.group || 'default';
+        
+        // Update with new icon
+        const result = await this.updateBookmarkNotes(bookmark, section, group, cleanIconUrl);
+        
+        if (result) {
+          this.hideError();
+          this.showError(this.ERROR_MESSAGES.ICON_UPDATE_SUCCESS(bookmark.name), this.CONSTANTS.SUCCESS_TOAST_DURATION_MS);
+          this.$forceUpdate();
+        } else {
+          this.showError(this.ERROR_MESSAGES.ICON_UPDATE_FAILED, this.CONSTANTS.ERROR_TOAST_DURATION_MS);
+        }
+      } catch (error) {
+        this.showError(this.ERROR_MESSAGES.GENERIC_ERROR(error.message), this.CONSTANTS.ERROR_TOAST_DURATION_MS);
       }
     },
     
     cleanupDrag() {
       if (this.dragState.preview) {
-        document.body.removeChild(this.dragState.preview);
+        this.dragState.preview.style.display = 'none';
+        // Don't remove from DOM, just hide it for reuse
       }
       
       document.removeEventListener('mousemove', this.onMouseMove);
@@ -671,7 +855,8 @@ createApp({
         draggedFrom: null,
         startX: 0,
         startY: 0,
-        preview: null
+        preview: null,
+        previewElement: this.dragState.previewElement // Keep reusable element
       };
     },
     
@@ -693,7 +878,11 @@ createApp({
         Enter: () => {
           const target = bookmarks[this.selectedIndex] || bookmarks[0];
           if (target && (bookmarks.length === 1 || this.selectedIndex >= 0)) {
-            window.location.href = target.link;
+            if (this.isSafeUrl(target.link)) {
+              window.location.href = target.link;
+            } else {
+              console.error('Unsafe URL blocked:', target.link);
+            }
           }
         },
         Escape: () => {
@@ -732,7 +921,7 @@ createApp({
     'store.search.query'(newQuery) {
       this.selectedIndex = -1;
       clearTimeout(this.timers.search);
-      this.timers.search = setTimeout(() => this.searchBookmarks(newQuery), 200);
+      this.timers.search = setTimeout(() => this.searchBookmarks(newQuery), this.CONSTANTS.SEARCH_DEBOUNCE_MS);
     }
   },
   
@@ -748,5 +937,10 @@ createApp({
     clearTimeout(this.timers.search);
     if (this.controllers.search) this.controllers.search.abort();
     if (this.dragState.isDragging) this.cleanupDrag();
+    
+    // Clean up drag preview element on component unmount
+    if (this.dragState.previewElement) {
+      document.body.removeChild(this.dragState.previewElement);
+    }
   }
 }).mount('#app');
