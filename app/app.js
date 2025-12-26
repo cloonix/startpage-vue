@@ -21,7 +21,7 @@ createApp({
       // Caching and performance
       iconCache: new Map(),
       iconCacheMaxSize: 500,
-      controllers: { search: null },
+      controllers: { search: null, searchId: null },
       timers: { search: null },
       
       // Drag and drop state
@@ -378,10 +378,14 @@ createApp({
         return;
       }
       
+      // Cancel previous search
       this.controllers.search?.abort();
       
       const controller = new AbortController();
+      const searchId = Date.now(); // Unique search identifier
       this.controllers.search = controller;
+      this.controllers.searchId = searchId;
+      
       this.store.search.status = 'loading';
       this.store.search.error = '';
       
@@ -390,6 +394,11 @@ createApp({
           params: { limit: '100', q: normalizedQuery },
           signal: controller.signal
         });
+        
+        // Only update if this is still the current search
+        if (this.controllers.searchId !== searchId) {
+          return;
+        }
         
         const results = (data?.results || []).map(item => this.createBookmark(item));
         this.store.search.results = results;
@@ -401,13 +410,15 @@ createApp({
         this.store.search.status = 'success';
         this.store.meta.loadedAt = new Date().toISOString();
       } catch (error) {
-        if (error.name === 'AbortError') return;
+        if (error.name === 'AbortError' || this.controllers.searchId !== searchId) {
+          return;
+        }
         
         this.store.search.results = [];
         this.store.search.status = 'error';
         this.store.search.error = error.message || 'Search failed';
       } finally {
-        if (this.controllers.search === controller) {
+        if (this.controllers.searchId === searchId) {
           this.controllers.search = null;
         }
       }
