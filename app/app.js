@@ -21,6 +21,12 @@ createApp({
       // Caching and performance
       iconCache: new Map(),
       iconCacheMaxSize: 500,
+      sortedCache: {
+        top: null,
+        bottom: null,
+        topVersion: 0,
+        bottomVersion: 0
+      },
       controllers: { search: null, searchId: null },
       timers: { search: null },
       
@@ -42,6 +48,13 @@ createApp({
     // Alphabetically sorted groups with alphabetically sorted bookmarks
     groupedBottomBookmarks() {
       const bookmarks = this.store.sections.bottom.items || [];
+      
+      // Check if cache is valid
+      if (this.sortedCache.bottom && 
+          this.sortedCache.bottomVersion === bookmarks.length) {
+        return this.sortedCache.bottom;
+      }
+      
       const grouped = {};
       
       bookmarks.forEach(bookmark => {
@@ -58,13 +71,30 @@ createApp({
         sorted[key] = grouped[key].sort((a, b) => a.name.localeCompare(b.name));
       });
       
+      // Update cache
+      this.sortedCache.bottom = sorted;
+      this.sortedCache.bottomVersion = bookmarks.length;
+      
       return sorted;
     },
     
     // Alphabetically sorted top bookmarks
     sortedTopBookmarks() {
-      return [...(this.store.sections.top.items || [])]
-        .sort((a, b) => a.name.localeCompare(b.name));
+      const items = this.store.sections.top.items || [];
+      
+      // Check if cache is valid
+      if (this.sortedCache.top && 
+          this.sortedCache.topVersion === items.length) {
+        return this.sortedCache.top;
+      }
+      
+      const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
+      
+      // Update cache
+      this.sortedCache.top = sorted;
+      this.sortedCache.topVersion = items.length;
+      
+      return sorted;
     },
     
     // Enhanced search results with highlighting
@@ -552,6 +582,10 @@ createApp({
         const altKey = `__${updatedData.url || ''}`;
         this.iconCache.delete(altKey);
       }
+      
+      // Invalidate sort cache
+      this.sortedCache.top = null;
+      this.sortedCache.bottom = null;
     },
     
     // DRAG AND DROP METHODS
