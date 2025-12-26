@@ -11,9 +11,12 @@ A lightweight self-hosted startpage that connects to **Linkding** for bookmark m
 - 🔖 **Real-time bookmark search** with debounced filtering
 - 🏷️ **Tag-based sections** for organized layouts
 - ⌨️ **Full keyboard navigation** (arrows, enter, escape)
-- 🖼️ **Custom icons** via bookmark notes
+- 🎨 **Drag-and-drop** bookmark organization
+- 🖼️ **Custom icons** via bookmark notes (with fallback to favicons)
 - 📱 **Responsive design** across all devices
+- 🔒 **Security hardened** with XSS protection, CSP, and SRI
 - 🐳 **Docker deployment** with single command
+- 🚨 **Error feedback** with toast notifications
 
 ## 🚀 Quick Start
 
@@ -27,22 +30,36 @@ A lightweight self-hosted startpage that connects to **Linkding** for bookmark m
 git clone https://github.com/cloonix/startpage-vue.git
 cd startpage-vue
 cp .env.example .env
-# Edit .env with your Linkding URL and API token
+# IMPORTANT: Edit .env with your real Linkding credentials
+nano .env  # or use your preferred editor
 ./build.sh
 ```
+
+> ⚠️ **Important**: The `.env` file must be updated with your actual Linkding URL and API token before deployment. The placeholder values will not work!
 
 Access at `http://localhost:3000`
 
 ## ⚙️ Configuration
 
-Create `.env` file:
+Create `.env` file from `.env.example`:
 ```bash
-PORT=3000
-LINKDING_BASE_URL=https://your-linkding.com
-LINKDING_API_TOKEN=your_api_token_here
+cp .env.example .env
 ```
 
-Get your API token: Linkding → Settings → Integrations → REST API Token
+Then edit with your actual values:
+```bash
+PORT=3000                                    # Port for the web interface
+LINKDING_BASE_URL=https://your-linkding.com # Your Linkding instance URL
+LINKDING_API_TOKEN=your_api_token_here      # Your Linkding API token
+
+# Optional: Cloudflare Access (if your Linkding is behind CF Access)
+CF_ACCESS_CLIENT_ID=your_client_id
+CF_ACCESS_CLIENT_SECRET=your_client_secret
+```
+
+**Get your API token**: Linkding → Settings → Integrations → REST API Token
+
+> 💡 **Tip**: The build script validates your configuration and will reject placeholder values to prevent deployment errors.
 
 ## 📋 Usage
 
