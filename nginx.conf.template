@@ -64,6 +64,14 @@ http {
             add_header Content-Type application/json;
         }
 
+        # Version endpoint (dynamic file)
+        location /version.json {
+            root /usr/share/nginx/html;
+            add_header Content-Type application/json;
+            add_header Cache-Control "no-cache, must-revalidate";
+            expires 0;
+        }
+
         # Config endpoint
         location /config {
             expires 10m;

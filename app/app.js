@@ -46,7 +46,7 @@ createApp({
           bottom: { items: [], status: 'loading', error: '' }
         },
         search: { query: '', results: [], status: 'idle', error: '' },
-        meta: { loadedAt: null },
+        meta: { loadedAt: null, version: 'loading...' },
         ui: { errorMessage: '', errorTimeout: null }
       },
       
@@ -517,6 +517,20 @@ createApp({
       }
     },
     
+    async loadVersion() {
+      try {
+        const response = await fetch('/version.json');
+        if (response.ok) {
+          const data = await response.json();
+          this.store.meta.version = data.version || 'unknown';
+        } else {
+          this.store.meta.version = 'unknown';
+        }
+      } catch (error) {
+        this.store.meta.version = 'unknown';
+      }
+    },
+    
     async loadAllBookmarks() {
       const maxRetries = this.CONSTANTS.RETRY_MAX_ATTEMPTS;
       let attempt = 0;
@@ -928,6 +942,9 @@ createApp({
   async mounted() {
     window.addEventListener('keydown', this.handleKeydown);
     this.$nextTick(() => this.$refs.searchInput?.focus());
+    
+    // Load version info
+    this.loadVersion();
     
     await this.loadAllBookmarks();
   },

@@ -16,13 +16,13 @@ COPY entrypoint.sh /entrypoint.sh
 # Copy static files (changes more frequently)
 COPY app/ /usr/share/nginx/html/
 
-# Set executable permission and replace placeholders in single RUN to reduce layers
+# Set executable permission, create version.json, and replace placeholders in single RUN to reduce layers
 RUN chmod +x /entrypoint.sh && \
+    echo "{\"version\":\"${VERSION}\",\"app_hash\":\"${APP_HASH}\",\"css_hash\":\"${CSS_HASH}\"}" > /usr/share/nginx/html/version.json && \
     find /usr/share/nginx/html -type f \( -name "*.html" -o -name "*.css" \) -exec \
     sed -i \
         -e "s/APP_HASH/${APP_HASH}/g" \
-        -e "s/CSS_HASH/${CSS_HASH}/g" \
-        -e "s/VERSION_PLACEHOLDER/${VERSION}/g" {} \+
+        -e "s/CSS_HASH/${CSS_HASH}/g" {} \+
 
 # Set environment variables
 ENV APP_HASH=${APP_HASH} \
